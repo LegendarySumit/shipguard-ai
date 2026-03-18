@@ -16,7 +16,7 @@ export default function LogoCloud() {
         <p className="text-center text-xs sm:text-sm font-bold text-slate-500 uppercase tracking-[0.15em] mb-8 sm:mb-10">
           Trusted by industry leaders worldwide
         </p>
-        <div className="grid grid-cols-3 sm:grid-cols-6 gap-6 sm:gap-8 items-center justify-items-center">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-5 sm:gap-7 items-center justify-items-center">
           {partners.map(({ name, icon: Icon }) => (
             <div
               key={name}

@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Package, Search, Filter, ChevronDown, ChevronUp, ArrowUpDown,
+  Package, Search, Filter, ChevronDown, ChevronUp,
   Plane, Ship, Truck, Train, Shuffle, Eye, MapPin, Clock, AlertTriangle,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -104,6 +104,15 @@ export default function Shipments() {
     else { setSortBy(field); setSortDir('desc'); }
   };
 
+  const statusColors = {
+    in_transit: 'bg-blue-100 text-blue-700',
+    at_port: 'bg-purple-100 text-purple-700',
+    customs_clearance: 'bg-amber-100 text-amber-700',
+    out_for_delivery: 'bg-indigo-100 text-indigo-700',
+    delivered: 'bg-green-100 text-green-700',
+    delayed: 'bg-red-100 text-red-700',
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -123,12 +132,12 @@ export default function Shipments() {
           <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Shipments</h1>
           <p className="text-slate-500 text-sm mt-0.5">{filtered.length} shipments found</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-72">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search tracking ID, route, carrier..."
+              placeholder="Search shipments..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="input-field pl-10 text-sm"
@@ -136,7 +145,7 @@ export default function Shipments() {
           </div>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`btn-secondary flex items-center gap-2 text-sm ${showFilters ? 'bg-brand-50 border-brand-200 text-brand-700' : ''}`}
+            className={`btn-secondary flex items-center justify-center gap-2 text-sm w-full sm:w-auto ${showFilters ? 'bg-brand-50 border-brand-200 text-brand-700' : ''}`}
           >
             <Filter className="w-4 h-4" />
             Filters
@@ -155,7 +164,7 @@ export default function Shipments() {
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1.5">Risk Level</label>
                 <select value={filterRisk} onChange={e => setFilterRisk(e.target.value)} className="input-field text-sm py-2">
@@ -203,111 +212,169 @@ export default function Shipments() {
 
       {/* Table */}
       <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px]">
-            <thead>
-              <tr className="border-b border-slate-100">
-                {[
-                  { key: 'trackingId', label: 'Tracking ID' },
-                  { key: 'origin', label: 'Route' },
-                  { key: 'carrier', label: 'Carrier' },
-                  { key: 'mode', label: 'Mode' },
-                  { key: 'status', label: 'Status' },
-                  { key: 'riskScore', label: 'Risk' },
-                  { key: 'eta', label: 'ETA' },
-                  { key: 'actions', label: '', noSort: true },
-                ].map(col => (
-                  <th
-                    key={col.key}
-                    onClick={() => !col.noSort && toggleSort(col.key)}
-                    className={`px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ${!col.noSort ? 'cursor-pointer hover:text-slate-700 select-none' : ''}`}
-                  >
-                    <div className="flex items-center gap-1">
-                      {col.label}
-                      {!col.noSort && sortBy === col.key && (
-                        sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
-                      )}
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
+        {filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+            <Package className="w-12 h-12 mb-4 text-slate-300" />
+            <p className="text-lg font-medium text-slate-500">No shipments found</p>
+            <p className="text-sm mt-1">Try adjusting your filters or search query</p>
+          </div>
+        ) : (
+          <>
+            <div className="md:hidden divide-y divide-slate-100">
               {paginated.map((s, i) => {
                 const ModeIcon = modeIcons[s.mode] || Package;
-                const statusColors = {
-                  in_transit: 'bg-blue-100 text-blue-700',
-                  at_port: 'bg-purple-100 text-purple-700',
-                  customs_clearance: 'bg-amber-100 text-amber-700',
-                  out_for_delivery: 'bg-indigo-100 text-indigo-700',
-                  delivered: 'bg-green-100 text-green-700',
-                  delayed: 'bg-red-100 text-red-700',
-                };
                 return (
-                  <tr
+                  <button
                     key={s.trackingId || i}
                     onClick={() => navigate(`/shipments/${s.id || s.trackingId}`)}
-                    className="table-row cursor-pointer"
+                    className="w-full text-left p-4 hover:bg-slate-50 transition-colors"
                   >
-                    <td className="px-4 py-3">
-                      <span className="text-sm font-semibold text-slate-700 font-mono">{s.trackingId}</span>
-                      <p className="text-xs text-slate-400">{s.product}</p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 text-sm text-slate-600">
-                        <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
-                        <span className="truncate max-w-[100px]">{s.origin?.split(',')[0]}</span>
-                        <span className="text-slate-300">→</span>
-                        <span className="truncate max-w-[100px]">{s.destination?.split(',')[0]}</span>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold text-slate-700 font-mono truncate">{s.trackingId}</p>
+                        <p className="text-xs text-slate-400 truncate mt-0.5">{s.product}</p>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-slate-600">{s.carrier}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <ModeIcon className="w-4 h-4 text-slate-400" />
-                        <span className="text-sm text-slate-600 capitalize">{s.mode}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`badge ${statusColors[s.status] || 'bg-slate-100 text-slate-600'}`}>
+                      <span className={`badge ${statusColors[s.status] || 'bg-slate-100 text-slate-600'} flex-shrink-0`}>
                         {s.status?.replace(/_/g, ' ')}
                       </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all"
-                            style={{ width: `${s.riskScore}%`, backgroundColor: s.riskColor }}
-                          />
-                        </div>
-                        <span className="text-sm font-semibold" style={{ color: s.riskColor }}>
-                          {s.riskScore}%
-                        </span>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-sm text-slate-600 mt-2">
+                      <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                      <span className="truncate">{s.origin?.split(',')[0]}</span>
+                      <span className="text-slate-300">→</span>
+                      <span className="truncate">{s.destination?.split(',')[0]}</span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 mt-3 text-xs">
+                      <div className="flex items-center gap-1.5 text-slate-500">
+                        <ModeIcon className="w-3.5 h-3.5" />
+                        <span className="capitalize">{s.mode}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1 text-sm text-slate-500">
-                        <Clock className="w-3 h-3" />
+                      <div className="flex items-center gap-1 text-slate-500 justify-end">
+                        <Clock className="w-3.5 h-3.5" />
                         {s.eta ? new Date(s.eta).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
                       </div>
+                    </div>
+
+                    <div className="mt-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-[11px] text-slate-400">Risk</p>
+                        <p className="text-xs font-semibold" style={{ color: s.riskColor }}>{s.riskScore}%</p>
+                      </div>
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="h-full rounded-full" style={{ width: `${s.riskScore}%`, backgroundColor: s.riskColor }} />
+                      </div>
                       {s.estimatedDelay > 0 && (
-                        <p className="text-xs text-red-500 flex items-center gap-0.5 mt-0.5">
-                          <AlertTriangle className="w-3 h-3" /> +{s.estimatedDelay}h
+                        <p className="text-xs text-red-500 flex items-center gap-1 mt-1.5">
+                          <AlertTriangle className="w-3 h-3" /> +{s.estimatedDelay}h predicted delay
                         </p>
                       )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <button className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-brand-600 transition-colors">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
+                    </div>
+                  </button>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
+            </div>
+
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full min-w-[820px]">
+                <thead>
+                  <tr className="border-b border-slate-100">
+                    {[
+                      { key: 'trackingId', label: 'Tracking ID' },
+                      { key: 'origin', label: 'Route' },
+                      { key: 'carrier', label: 'Carrier' },
+                      { key: 'mode', label: 'Mode' },
+                      { key: 'status', label: 'Status' },
+                      { key: 'riskScore', label: 'Risk' },
+                      { key: 'eta', label: 'ETA' },
+                      { key: 'actions', label: '', noSort: true },
+                    ].map(col => (
+                      <th
+                        key={col.key}
+                        onClick={() => !col.noSort && toggleSort(col.key)}
+                        className={`px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider ${!col.noSort ? 'cursor-pointer hover:text-slate-700 select-none' : ''}`}
+                      >
+                        <div className="flex items-center gap-1">
+                          {col.label}
+                          {!col.noSort && sortBy === col.key && (
+                            sortDir === 'asc' ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />
+                          )}
+                        </div>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((s, i) => {
+                    const ModeIcon = modeIcons[s.mode] || Package;
+                    return (
+                      <tr
+                        key={s.trackingId || i}
+                        onClick={() => navigate(`/shipments/${s.id || s.trackingId}`)}
+                        className="table-row cursor-pointer"
+                      >
+                        <td className="px-4 py-3">
+                          <span className="text-sm font-semibold text-slate-700 font-mono">{s.trackingId}</span>
+                          <p className="text-xs text-slate-400">{s.product}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 text-sm text-slate-600">
+                            <MapPin className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                            <span className="truncate max-w-[120px]">{s.origin?.split(',')[0]}</span>
+                            <span className="text-slate-300">→</span>
+                            <span className="truncate max-w-[120px]">{s.destination?.split(',')[0]}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-slate-600">{s.carrier}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1.5">
+                            <ModeIcon className="w-4 h-4 text-slate-400" />
+                            <span className="text-sm text-slate-600 capitalize">{s.mode}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`badge ${statusColors[s.status] || 'bg-slate-100 text-slate-600'}`}>
+                            {s.status?.replace(/_/g, ' ')}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-16 h-2 bg-slate-100 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{ width: `${s.riskScore}%`, backgroundColor: s.riskColor }}
+                              />
+                            </div>
+                            <span className="text-sm font-semibold" style={{ color: s.riskColor }}>
+                              {s.riskScore}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1 text-sm text-slate-500">
+                            <Clock className="w-3 h-3" />
+                            {s.eta ? new Date(s.eta).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'N/A'}
+                          </div>
+                          {s.estimatedDelay > 0 && (
+                            <p className="text-xs text-red-500 flex items-center gap-0.5 mt-0.5">
+                              <AlertTriangle className="w-3 h-3" /> +{s.estimatedDelay}h
+                            </p>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-brand-600 transition-colors">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {/* Pagination */}
         {totalPages > 1 && (
@@ -350,13 +417,6 @@ export default function Shipments() {
           </div>
         )}
 
-        {filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-slate-400">
-            <Package className="w-12 h-12 mb-4 text-slate-300" />
-            <p className="text-lg font-medium text-slate-500">No shipments found</p>
-            <p className="text-sm mt-1">Try adjusting your filters or search query</p>
-          </div>
-        )}
       </div>
     </div>
   );

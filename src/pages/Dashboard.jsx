@@ -211,7 +211,7 @@ export default function Dashboard() {
           <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Command Center</h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-0.5">AI-powered shipment delay risk overview</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 text-green-700 rounded-full text-xs font-medium">
             <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> System Online
           </span>
@@ -354,7 +354,7 @@ export default function Dashboard() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <p className="text-xs sm:text-sm font-semibold text-slate-700 font-mono">{s.trackingId}</p>
-                    <span className={`badge-${s.riskLevel} hidden xs:inline-flex`}>{s.riskLevel}</span>
+                    <span className={`badge-${s.riskLevel} hidden sm:inline-flex`}>{s.riskLevel}</span>
                   </div>
                   <p className="text-xs text-slate-500 truncate">{s.origin?.split(',')[0]} → {s.destination?.split(',')[0]}</p>
                 </div>

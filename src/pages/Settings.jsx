@@ -166,25 +166,25 @@ export default function Settings() {
           </div>
 
           <div className="stat-card p-2">
-            <div className="flex xl:flex-col gap-1 overflow-x-auto xl:overflow-visible -mx-1 px-1 xl:mx-0 xl:px-0">
+            <div className="grid grid-cols-2 gap-1 xl:flex xl:flex-col">
               {tabs.map(({ id, label, icon: Icon, subtitle }) => (
               <button
                 key={id}
                 onClick={() => setActiveTab(id)}
-                className={`group flex items-center justify-between gap-2 whitespace-nowrap xl:w-full px-3 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
+                className={`group flex items-center justify-center sm:justify-between gap-2 min-w-0 w-full px-2.5 sm:px-3 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all ${
                   activeTab === id
                     ? 'bg-brand-50 text-brand-700 border border-brand-100'
                     : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50 border border-transparent'
                 }`}
               >
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <Icon className="w-4 h-4" />
-                  <div className="text-left">
+                  <div className="text-left min-w-0">
                     <p>{label}</p>
                     {subtitle && <p className="text-[10px] text-slate-400 leading-tight hidden xl:block">{subtitle}</p>}
                   </div>
                 </div>
-                <ChevronRight className={`w-4 h-4 transition-transform ${activeTab === id ? 'text-brand-500' : 'text-slate-300 group-hover:text-slate-400'}`} />
+                <ChevronRight className={`hidden sm:block w-4 h-4 transition-transform ${activeTab === id ? 'text-brand-500' : 'text-slate-300 group-hover:text-slate-400'}`} />
               </button>
             ))}
             </div>
@@ -252,10 +252,12 @@ export default function Settings() {
                 </div>
               </div>
 
-              <button onClick={handleSaveAccount} disabled={loading} className="btn-primary flex items-center gap-2">
-                {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Account Settings
-              </button>
+              <div className="flex justify-center sm:justify-start">
+                <button onClick={handleSaveAccount} disabled={loading} className="btn-primary flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 text-sm">
+                  {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Account Settings
+                </button>
+              </div>
             </div>
           )}
 
@@ -273,17 +275,17 @@ export default function Settings() {
                   { key: 'pushNotif', label: 'Push Notifications', desc: 'Get real-time browser push notifications', icon: Bell },
                   { key: 'smsNotif', label: 'SMS Notifications', desc: 'Receive text messages for critical SLA breaches', icon: Smartphone },
                 ].map(({ key, label, desc, icon: Icon }) => (
-                  <div key={key} className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl">
-                    <div className="flex items-center gap-3">
+                  <div key={key} className="grid grid-cols-[1fr_auto] items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                    <div className="flex items-center gap-3 min-w-0">
                       <div className="w-10 h-10 rounded-xl bg-white flex items-center justify-center shadow-sm">
                         <Icon className="w-5 h-5 text-slate-600" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="text-sm font-medium text-slate-700">{label}</p>
                         <p className="text-xs text-slate-400">{desc}</p>
                       </div>
                     </div>
-                    <label className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex items-center cursor-pointer self-center flex-shrink-0">
                       <input
                         type="checkbox"
                         checked={form[key]}
@@ -304,10 +306,12 @@ export default function Settings() {
                 </div>
               </div>
 
-              <button onClick={handleSaveAccount} disabled={loading} className="btn-primary flex items-center gap-2">
-                {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
-                Save Notification Settings
-              </button>
+              <div className="flex justify-center sm:justify-start">
+                <button onClick={handleSaveAccount} disabled={loading} className="btn-primary flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 text-sm">
+                  {loading ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save className="w-4 h-4" />}
+                  Save Notification Settings
+                </button>
+              </div>
             </div>
           )}
 
@@ -384,9 +388,11 @@ export default function Settings() {
                 </div>
               </div>
 
-              <button onClick={handleSaveIntegrations} disabled={loading} className="btn-primary flex items-center gap-2">
-                <Save className="w-4 h-4" /> Save Integrations
-              </button>
+              <div className="flex justify-center sm:justify-start">
+                <button onClick={handleSaveIntegrations} disabled={loading} className="btn-primary flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 text-sm">
+                  <Save className="w-4 h-4" /> Save Integrations
+                </button>
+              </div>
             </div>
           )}
 
@@ -405,7 +411,7 @@ export default function Settings() {
                     <p className="text-sm font-semibold text-slate-700">Risk Alert Threshold</p>
                   </div>
                   <p className="text-xs text-slate-500 mb-3">Shipments above this score trigger proactive alerts.</p>
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     <input
                       type="range"
                       min="20"
@@ -414,7 +420,7 @@ export default function Settings() {
                       onChange={updateField('riskThreshold')}
                       className="flex-1 h-2 bg-slate-200 rounded-full appearance-none cursor-pointer accent-brand-600"
                     />
-                    <span className="text-lg font-bold text-brand-600 w-12 text-center">{form.riskThreshold}%</span>
+                    <span className="text-lg font-bold text-brand-600 w-12 text-left sm:text-center">{form.riskThreshold}%</span>
                   </div>
                   <div className="flex justify-between mt-1 text-[10px] text-slate-400">
                     <span>More alerts</span>
@@ -434,9 +440,11 @@ export default function Settings() {
                 </div>
               </div>
 
-              <button onClick={handleSavePreferences} disabled={loading} className="btn-primary flex items-center gap-2">
-                <Save className="w-4 h-4" /> Save Preferences
-              </button>
+              <div className="flex justify-center sm:justify-start">
+                <button onClick={handleSavePreferences} disabled={loading} className="btn-primary flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 text-sm">
+                  <Save className="w-4 h-4" /> Save Preferences
+                </button>
+              </div>
             </div>
           )}
         </section>

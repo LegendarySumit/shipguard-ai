@@ -94,7 +94,7 @@ export default function Stats() {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-8">
           {stats.map(({ value, suffix, label, sub, icon: Icon, color, ring }, idx) => (
             <motion.div
               key={label}
@@ -105,7 +105,7 @@ export default function Stats() {
             >
               <div className="bg-white/70 backdrop-blur-lg rounded-3xl border border-white/60 shadow-md p-5 sm:p-6 text-center hover:shadow-2xl hover:shadow-slate-200/60 hover:bg-white/90 transition-all duration-500 hover:-translate-y-1">
                 {/* Ring + Icon */}
-                <div className="relative w-24 h-24 sm:w-28 sm:h-28 mx-auto mb-4">
+                <div className="relative w-28 h-28 mx-auto mb-4">
                   <RingProgress percentage={ring} color={color} size={112} />
                   <div className="absolute inset-0 flex items-center justify-center">
                     <div

@@ -249,12 +249,12 @@ export default function Analytics() {
           <h1 className="text-xl sm:text-2xl font-bold text-slate-800">Analytics</h1>
           <p className="text-slate-500 text-xs sm:text-sm mt-0.5">Shipment performance and risk analytics</p>
         </div>
-        <div className="flex items-center gap-1 bg-white rounded-xl border border-slate-200 p-1">
+        <div className="flex items-center gap-1 bg-white rounded-xl border border-slate-200 p-1 w-full sm:w-auto overflow-x-auto">
           {['24h', '7d', '30d', '90d'].map(range => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors whitespace-nowrap ${
                 timeRange === range ? 'bg-brand-600 text-white' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -400,7 +400,7 @@ export default function Analytics() {
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Transport Mode Analysis</h3>
           <div className="h-56 sm:h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <RadarChart outerRadius={90} data={modeData}>
+              <RadarChart outerRadius={78} data={modeData}>
                 <PolarGrid strokeDasharray="3 3" stroke="#e2e8f0" />
                 <PolarAngleAxis dataKey="mode" tick={{ fontSize: 12, fill: '#64748b' }} />
                 <Radar name="Avg Risk" dataKey="avgRisk" stroke="#6366f1" fill="#6366f1" fillOpacity={0.15} strokeWidth={2} />

@@ -100,10 +100,10 @@ export default function Pricing() {
           </p>
 
           {/* Billing toggle */}
-          <div className="mt-8 inline-flex items-center gap-1 bg-slate-100 p-1 rounded-2xl">
+          <div className="mt-8 inline-flex flex-wrap items-center justify-center gap-1 bg-slate-100 p-1 rounded-2xl">
             <button
               onClick={() => setAnnual(false)}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 ${
+              className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 ${
                 !annual ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -111,7 +111,7 @@ export default function Pricing() {
             </button>
             <button
               onClick={() => setAnnual(true)}
-              className={`px-5 py-2.5 rounded-xl text-sm font-bold transition-all duration-200 flex items-center gap-2 ${
+              className={`px-4 sm:px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all duration-200 flex items-center gap-2 ${
                 annual ? 'bg-white text-slate-900 shadow-md' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -124,7 +124,7 @@ export default function Pricing() {
         </motion.div>
 
         {/* Cards grid */}
-        <div className="grid md:grid-cols-3 gap-6 sm:gap-8 max-w-5xl mx-auto items-stretch">
+        <div className="grid md:grid-cols-3 gap-5 sm:gap-8 max-w-5xl mx-auto items-stretch">
           {plans.map(({ name, icon: Icon, price, desc, features, color, gradient, accentBg, cta, popular }, idx) => (
             <div key={name} className="relative pt-6 h-full">
               {/* Popular badge — straddles the top edge */}

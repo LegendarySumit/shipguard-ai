@@ -50,7 +50,7 @@ const row2 = [
 
 function TestimonialCard({ quote, name, role, company, avatar, color }) {
   return (
-    <div className="flex-shrink-0 w-[320px] sm:w-[380px] bg-white/70 backdrop-blur-lg rounded-2xl border border-white/60 shadow-md p-5 sm:p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:bg-white/90 transition-all duration-300 group">
+    <div className="flex-shrink-0 w-[280px] sm:w-[360px] bg-white/70 backdrop-blur-lg rounded-2xl border border-white/60 shadow-md p-5 sm:p-6 hover:shadow-xl hover:shadow-slate-200/50 hover:bg-white/90 transition-all duration-300 group">
       <div className="flex items-center gap-0.5 mb-3">
         {[...Array(5)].map((_, i) => (
           <Star key={i} className="w-3.5 h-3.5 text-amber-400" fill="currentColor" />

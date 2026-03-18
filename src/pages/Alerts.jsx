@@ -179,7 +179,7 @@ export default function Alerts() {
         </div>
         <button
           onClick={() => setShowFilters(!showFilters)}
-          className={`btn-secondary flex items-center gap-2 text-sm ${showFilters ? 'bg-brand-50 border-brand-200 text-brand-700' : ''}`}
+          className={`btn-secondary flex items-center justify-center gap-2 text-sm w-full sm:w-auto ${showFilters ? 'bg-brand-50 border-brand-200 text-brand-700' : ''}`}
         >
           <Filter className="w-4 h-4" />
           Filters
@@ -291,11 +291,11 @@ export default function Alerts() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 flex-shrink-0 mt-3 sm:mt-0">
+                      <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap w-full sm:w-auto mt-3 sm:mt-0">
                         {isActive && (
                           <button
                             onClick={() => handleAcknowledge(alert.id)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-amber-100 text-amber-700 hover:bg-amber-200 transition-colors flex-1 sm:flex-none"
                           >
                             Acknowledge
                           </button>
@@ -303,7 +303,7 @@ export default function Alerts() {
                         {(isActive || isAcknowledged) && (
                           <button
                             onClick={() => handleResolve(alert.id)}
-                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
+                            className="px-3 py-1.5 text-xs font-medium rounded-lg bg-green-100 text-green-700 hover:bg-green-200 transition-colors flex-1 sm:flex-none"
                           >
                             Resolve
                           </button>

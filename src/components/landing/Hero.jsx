@@ -27,8 +27,8 @@ export default function Hero() {
         }}
       />
 
-      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-28 sm:pt-32 pb-16 sm:pb-20">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+      <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 sm:pt-30 lg:pt-32 pb-14 sm:pb-20">
+        <div className="grid lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           {/* Left content */}
           <div>
             {/* Badge */}
@@ -39,7 +39,7 @@ export default function Hero() {
               </span>
             </div>
 
-            <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 leading-[1.1] tracking-tight">
+            <h1 className="text-[1.95rem] sm:text-4xl md:text-5xl lg:text-6xl font-extrabold text-slate-900 leading-[1.1] tracking-tight">
               Predict Shipment{' '}
               <span className="relative">
                 <span className="text-gradient">Delays Before</span>
@@ -58,20 +58,20 @@ export default function Hero() {
             {/* CTA buttons */}
             <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row gap-3 sm:gap-4">
               {currentUser ? (
-                <Link to="/dashboard" className="btn-primary text-center text-base px-8 py-3.5 flex items-center justify-center gap-2">
+                <Link to="/dashboard" className="btn-primary w-full sm:w-auto text-center text-base px-8 py-3.5 flex items-center justify-center gap-2">
                   Go to Dashboard <ArrowRight className="w-5 h-5" />
                 </Link>
               ) : (
                 <>
                   <Link
                     to="/register"
-                    className="btn-primary text-center text-base px-8 py-3.5 flex items-center justify-center gap-2 shadow-xl shadow-brand-500/30"
+                    className="btn-primary w-full sm:w-auto text-center text-base px-8 py-3.5 flex items-center justify-center gap-2 shadow-xl shadow-brand-500/30"
                   >
                     Start Free Trial <ChevronRight className="w-5 h-5" />
                   </Link>
                   <button
                     onClick={() => document.querySelector('#how-it-works')?.scrollIntoView({ behavior: 'smooth' })}
-                    className="btn-secondary text-center text-base px-8 py-3.5 flex items-center justify-center gap-2"
+                    className="btn-secondary w-full sm:w-auto text-center text-base px-8 py-3.5 flex items-center justify-center gap-2"
                   >
                     <Play className="w-5 h-5 text-brand-600" />
                     See How It Works
@@ -108,7 +108,7 @@ export default function Hero() {
           </div>
 
           {/* Right: Dashboard preview card */}
-          <div className="relative hidden lg:block">
+          <div className="relative hidden xl:block">
             <div className="absolute -inset-4 bg-gradient-to-r from-brand-500/20 to-indigo-500/20 rounded-3xl blur-2xl" />
             <div className="relative bg-white/80 backdrop-blur-xl rounded-2xl shadow-2xl shadow-slate-300/50 border border-white/60 overflow-hidden">
               {/* Mini browser bar */}

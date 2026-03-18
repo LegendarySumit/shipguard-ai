@@ -162,7 +162,7 @@ export default function ShipmentDetail() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               <h1 className="text-lg sm:text-2xl font-bold text-slate-800 font-mono">{shipment.trackingId}</h1>
               <span className={`badge-${shipment.riskLevel}`}>{shipment.riskLevel} risk</span>
             </div>
@@ -231,19 +231,19 @@ export default function ShipmentDetail() {
           {/* Shipment Info */}
           <div className="stat-card">
             <h3 className="text-sm font-semibold text-slate-700 mb-4">Shipment Details</h3>
-            <div className="grid grid-cols-1 xs:grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">Origin</p>
                 <div className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-green-500" />
-                  <p className="text-sm font-medium text-slate-700">{shipment.origin}</p>
+                  <p className="text-sm font-medium text-slate-700 break-words">{shipment.origin}</p>
                 </div>
               </div>
               <div>
                 <p className="text-xs text-slate-400 mb-0.5">Destination</p>
                 <div className="flex items-center gap-1.5">
                   <MapPin className="w-3.5 h-3.5 text-red-500" />
-                  <p className="text-sm font-medium text-slate-700">{shipment.destination}</p>
+                  <p className="text-sm font-medium text-slate-700 break-words">{shipment.destination}</p>
                 </div>
               </div>
               <div>
@@ -492,7 +492,7 @@ export default function ShipmentDetail() {
       </div>
 
       {/* ── Bottom row: Weather + Traffic spanning full width ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
 
         {/* Weather Card */}
         <div className="stat-card">
@@ -520,7 +520,7 @@ export default function ShipmentDetail() {
                     {country && <p className="text-xs text-slate-400">{country}</p>}
                   </div>
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="p-3 bg-blue-50 rounded-xl text-center">
                     <Wind className="w-4 h-4 text-blue-400 mx-auto mb-1.5" />
                     <p className="text-sm font-semibold text-slate-700">{wind} km/h</p>
@@ -545,7 +545,7 @@ export default function ShipmentDetail() {
         {/* Traffic & Port Status */}
         <div className="stat-card">
           <h3 className="text-sm font-semibold text-slate-700 mb-4">Traffic & Port Status</h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="p-3 bg-slate-50 rounded-xl">
               <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Traffic</p>
               <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-semibold ${
@@ -581,7 +581,7 @@ export default function ShipmentDetail() {
                 </div>
               </>
             ) : (
-              <div className="col-span-2 p-3 bg-slate-50 rounded-xl text-center">
+              <div className="sm:col-span-2 p-3 bg-slate-50 rounded-xl text-center">
                 <p className="text-xs text-slate-400">No port data for this route</p>
               </div>
             )}

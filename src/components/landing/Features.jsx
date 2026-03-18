@@ -121,7 +121,7 @@ function BarVisual({ data }) {
     <div className="space-y-3">
       {data.map((item, i) => (
         <div key={item.label} className="flex items-center gap-3">
-          <span className="text-[11px] text-slate-500 w-28 text-right flex-shrink-0">{item.label}</span>
+          <span className="text-[10px] sm:text-[11px] text-slate-500 w-20 sm:w-28 text-right flex-shrink-0">{item.label}</span>
           <div className="flex-1 h-5 bg-slate-100/80 rounded-full overflow-hidden">
             <motion.div
               className="h-full rounded-full"
@@ -191,7 +191,7 @@ export default function Features() {
               <button
                 key={f.id}
                 onClick={() => setActive(idx)}
-                className={`relative flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold transition-all duration-300 ${
+                className={`relative flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-full text-xs sm:text-sm font-semibold transition-all duration-300 ${
                   isActive
                     ? 'text-white shadow-lg'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-700'
@@ -219,7 +219,7 @@ export default function Features() {
             <div className="grid md:grid-cols-2 gap-0">
 
               {/* Left: Text */}
-              <div className="p-8 sm:p-10 flex flex-col justify-center">
+              <div className="p-5 sm:p-7 lg:p-10 flex flex-col justify-center">
                 <div className="flex items-center gap-3 mb-5">
                   <div
                     className={`w-12 h-12 rounded-2xl bg-gradient-to-br ${current.gradient} flex items-center justify-center shadow-lg`}
@@ -255,7 +255,7 @@ export default function Features() {
               </div>
 
               {/* Right: Bar Chart */}
-              <div className="p-8 sm:p-10 bg-white/50 backdrop-blur-md border-l border-white/60">
+              <div className="p-5 sm:p-7 lg:p-10 bg-white/50 backdrop-blur-md border-t md:border-t-0 md:border-l border-white/60">
                 <div className="flex items-center justify-between mb-6">
                   <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Factor Analysis</span>
                   <span className="flex items-center gap-1.5 text-[10px] font-semibold" style={{ color: current.color }}>
