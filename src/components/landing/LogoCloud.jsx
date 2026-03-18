@@ -20,10 +20,10 @@ export default function LogoCloud() {
           {partners.map(({ name, icon: Icon }) => (
             <div
               key={name}
-              className="flex items-center gap-2.5 text-slate-500 hover:text-slate-800 transition-colors cursor-default"
+              className="flex flex-col sm:flex-row items-center text-center sm:text-left gap-1.5 sm:gap-2.5 text-slate-500 hover:text-slate-800 transition-colors cursor-default"
             >
               <Icon className="w-6 h-6 sm:w-7 sm:h-7" strokeWidth={1.8} />
-              <span className="text-sm sm:text-base font-bold hidden sm:inline">{name}</span>
+              <span className="text-[11px] sm:text-base font-semibold sm:font-bold leading-tight">{name}</span>
             </div>
           ))}
         </div>
