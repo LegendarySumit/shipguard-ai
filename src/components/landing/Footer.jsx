@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Shield } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 const footerLinks = {
@@ -50,9 +49,7 @@ export default function Footer() {
         <div className="py-12 sm:py-16 grid gap-10 lg:grid-cols-[1.4fr_0.75fr_0.75fr_0.75fr]">
           <div>
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
+              <img src="/favicon.svg" alt="ShipGuard" className="w-9 h-9 rounded-xl" />
               <span className="text-lg font-bold text-white">
                 Ship<span className="text-brand-400">Guard</span> AI
               </span>

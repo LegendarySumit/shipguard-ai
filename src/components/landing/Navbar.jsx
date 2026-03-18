@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, Menu, X, ChevronRight, ArrowRight, Zap } from 'lucide-react';
+import { Menu, X, ChevronRight, ArrowRight, Zap } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export default function Navbar() {
@@ -52,9 +52,11 @@ export default function Navbar() {
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-2.5 group">
-            <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 flex items-center justify-center shadow-lg shadow-brand-500/25 group-hover:shadow-brand-500/40 transition-all">
-              <Shield className="w-5 h-5 sm:w-[22px] sm:h-[22px] text-white" />
-            </div>
+            <img
+              src="/favicon.svg"
+              alt="ShipGuard"
+              className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl shadow-lg shadow-brand-500/25 group-hover:shadow-brand-500/40 transition-all"
+            />
             <div className="flex flex-col">
               <span className="text-base sm:text-lg font-bold text-slate-800 leading-tight">
                 Ship<span className="text-brand-600">Guard</span> AI
