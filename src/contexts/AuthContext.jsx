@@ -148,6 +148,8 @@ export function AuthProvider({ children }) {
     setUserProfile(null);
     sessionStorage.removeItem(AUTH_SESSION_FLAG);
     localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
+    localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+    localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
     return signOut(auth);
   }
 
@@ -193,26 +195,11 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        if (user && !sessionStorage.getItem(AUTH_SESSION_FLAG) && redirectPending) {
-          // Some browsers/devices can lose sessionStorage across OAuth redirect.
-          // Recover once and continue authenticated session.
-          sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
-        }
-
-        if (user && !sessionStorage.getItem(AUTH_SESSION_FLAG)) {
-          try {
-            await signOut(auth);
-          } catch (e) {
-            console.error('Failed to clear stale auth session:', e);
-          }
-          setCurrentUser(null);
-          setUserProfile(null);
-          setLoading(false);
-          return;
-        }
-
         setCurrentUser(user);
         if (user) {
+          // Always trust Firebase auth state for authenticated users.
+          // Session storage can be dropped across redirects in some browsers.
+          sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
           if (redirectPending) {
             localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
             localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
