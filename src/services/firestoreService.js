@@ -1,9 +1,21 @@
 import {
   collection, doc, getDocs, getDoc, addDoc, updateDoc, deleteDoc,
-  query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp,
+  query, where, orderBy, limit, onSnapshot, serverTimestamp,
   writeBatch
 } from 'firebase/firestore';
 import { db, auth } from '../config/firebase';
+
+const OWNER_FIELDS = ['ownerId', 'userId', 'createdBy'];
+
+function sortByCreatedAtDesc(rows) {
+  return [...rows].sort((a, b) => {
+    const aDate = toJsDate(a.createdAt);
+    const bDate = toJsDate(b.createdAt);
+    const at = aDate ? aDate.getTime() : 0;
+    const bt = bDate ? bDate.getTime() : 0;
+    return bt - at;
+  });
+}
 
 function toJsDate(value) {
   if (!value) return null;
@@ -49,22 +61,53 @@ function initTrendBuckets(days) {
   return { start, buckets, byKey };
 }
 
+function applyOptionalShipmentFilters(constraints, filters = {}) {
+  if (filters.status) constraints.push(where('status', '==', filters.status));
+  if (filters.riskLevel) constraints.push(where('riskLevel', '==', filters.riskLevel));
+  if (filters.carrier) constraints.push(where('carrier', '==', filters.carrier));
+}
+
+function applyOwnerLimit(rows, filters = {}) {
+  const sorted = sortByCreatedAtDesc(rows);
+  if (!filters.limit) return sorted;
+  return sorted.slice(0, Math.max(1, Number(filters.limit) || 1));
+}
+
+async function getUnscopedShipments(filters = {}) {
+  const constraints = [];
+  applyOptionalShipmentFilters(constraints, filters);
+  constraints.push(orderBy('createdAt', 'desc'));
+  if (filters.limit) constraints.push(limit(filters.limit));
+
+  const qRef = query(collection(db, 'shipments'), ...constraints);
+  const snap = await getDocs(qRef);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
+async function getOwnerScopedShipmentsWithFallback(filters, currentUid) {
+  for (const ownerField of OWNER_FIELDS) {
+    const constraints = [where(ownerField, '==', currentUid)];
+    applyOptionalShipmentFilters(constraints, filters);
+    const qRef = query(collection(db, 'shipments'), ...constraints);
+    const snap = await getDocs(qRef);
+    if (!snap.empty) {
+      const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      return applyOwnerLimit(rows, filters);
+    }
+  }
+
+  return [];
+}
+
 export async function getDailyShipmentAggregates(options = {}) {
   const days = Math.max(1, Math.min(90, Number(options.days) || 7));
   const atRiskThreshold = Number(options.atRiskThreshold) || 50;
   const { start, buckets, byKey } = initTrendBuckets(days);
 
-  const q = query(
-    collection(db, 'shipments'),
-    where('createdAt', '>=', Timestamp.fromDate(start)),
-    orderBy('createdAt', 'asc')
-  );
-
-  const snap = await getDocs(q);
-  snap.docs.forEach((d) => {
-    const shipment = d.data();
+  const shipments = await getShipments();
+  shipments.forEach((shipment) => {
     const createdAt = toJsDate(shipment.createdAt);
-    if (!createdAt) return;
+    if (!createdAt || createdAt < start) return;
 
     const bucket = byKey.get(dayKey(createdAt));
     if (!bucket) return;
@@ -93,15 +136,26 @@ export async function getShipments(filters = {}) {
   let q = collection(db, 'shipments');
   const constraints = [];
   const currentUid = auth.currentUser?.uid || null;
-  if (currentUid && filters.scope !== 'all') constraints.push(where('ownerId', '==', currentUid));
-  if (filters.status) constraints.push(where('status', '==', filters.status));
-  if (filters.riskLevel) constraints.push(where('riskLevel', '==', filters.riskLevel));
-  if (filters.carrier) constraints.push(where('carrier', '==', filters.carrier));
-  constraints.push(orderBy('createdAt', 'desc'));
-  if (filters.limit) constraints.push(limit(filters.limit));
+  const ownerScoped = Boolean(currentUid && filters.scope !== 'all');
+  if (ownerScoped) {
+    const ownerScopedRows = await getOwnerScopedShipmentsWithFallback(filters, currentUid);
+    if (ownerScopedRows.length > 0) return ownerScopedRows;
+
+    // Backward compatibility for webhook/legacy rows that were stored without owner metadata.
+    return getUnscopedShipments(filters);
+  }
+
+  applyOptionalShipmentFilters(constraints, filters);
+
+  if (!ownerScoped) {
+    constraints.push(orderBy('createdAt', 'desc'));
+    if (filters.limit) constraints.push(limit(filters.limit));
+  }
+
   q = query(q, ...constraints);
   const snap = await getDocs(q);
-  return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  return rows;
 }
 
 export async function getShipmentById(id) {
@@ -135,15 +189,90 @@ export function subscribeToShipments(callback, filters = {}) {
   let q = collection(db, 'shipments');
   const constraints = [];
   const currentUid = auth.currentUser?.uid || null;
-  if (currentUid && filters.scope !== 'all') constraints.push(where('ownerId', '==', currentUid));
-  if (filters.status) constraints.push(where('status', '==', filters.status));
-  constraints.push(orderBy('createdAt', 'desc'));
-  if (filters.limit) constraints.push(limit(filters.limit));
+  const ownerScoped = Boolean(currentUid && filters.scope !== 'all');
+  applyOptionalShipmentFilters(constraints, filters);
+
+  if (ownerScoped) {
+    let activeUnsub = null;
+
+    const attachUnscoped = () => {
+      const globalConstraints = [...constraints, orderBy('createdAt', 'desc')];
+      if (filters.limit) globalConstraints.push(limit(filters.limit));
+      const globalQuery = query(collection(db, 'shipments'), ...globalConstraints);
+
+      activeUnsub = onSnapshot(
+        globalQuery,
+        (snap) => {
+          const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          callback(docs);
+        },
+        (error) => {
+          console.error('Shipments listener failed:', error);
+          // Keep the current UI data instead of forcing a temporary empty state.
+        }
+      );
+    };
+
+    const attachForOwnerField = (ownerFieldIndex) => {
+      const ownerField = OWNER_FIELDS[ownerFieldIndex];
+      const ownerConstraints = [where(ownerField, '==', currentUid), ...constraints];
+      const ownerQuery = query(collection(db, 'shipments'), ...ownerConstraints);
+
+      activeUnsub = onSnapshot(
+        ownerQuery,
+        (snap) => {
+          if (snap.empty && ownerFieldIndex < OWNER_FIELDS.length - 1) {
+            if (activeUnsub) activeUnsub();
+            attachForOwnerField(ownerFieldIndex + 1);
+            return;
+          }
+
+          if (snap.empty) {
+            if (activeUnsub) activeUnsub();
+            attachUnscoped();
+            return;
+          }
+
+          const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          callback(applyOwnerLimit(docs, filters));
+        },
+        (error) => {
+          if (ownerFieldIndex < OWNER_FIELDS.length - 1) {
+            if (activeUnsub) activeUnsub();
+            attachForOwnerField(ownerFieldIndex + 1);
+            return;
+          }
+
+          if (activeUnsub) activeUnsub();
+          attachUnscoped();
+        }
+      );
+    };
+
+    attachForOwnerField(0);
+
+    return () => {
+      if (activeUnsub) activeUnsub();
+    };
+  }
+
+  if (!ownerScoped) {
+    constraints.push(orderBy('createdAt', 'desc'));
+    if (filters.limit) constraints.push(limit(filters.limit));
+  }
+
   q = query(q, ...constraints);
-  return onSnapshot(q, (snap) => {
-    const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    callback(docs);
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      callback(docs);
+    },
+    (error) => {
+      console.error('Shipments listener failed:', error);
+      // Do not clear existing rows on transient connectivity/listen failures.
+    }
+  );
 }
 
 // ─── Alerts ───
@@ -336,11 +465,15 @@ export async function upsertRouteRecommendationForShipment(shipment, intelligenc
 
 // ─── Analytics ───
 export async function getAnalyticsData() {
-  const shipmentsSnap = await getDocs(collection(db, 'shipments'));
-  const shipments = shipmentsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  const shipments = await getShipments();
 
-  const alertsSnap = await getDocs(collection(db, 'alerts'));
-  const alerts = alertsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  let alerts = [];
+  try {
+    const alertsSnap = await getDocs(collection(db, 'alerts'));
+    alerts = alertsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.warn('Analytics alerts query failed:', error?.message || error);
+  }
 
   const totalShipments = shipments.length;
   const atRisk = shipments.filter(s => s.riskScore >= 60).length;

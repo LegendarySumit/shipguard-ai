@@ -49,12 +49,9 @@ export default function Register() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      toast.success('Account created!');
-      navigate('/dashboard');
+      toast.success('Redirecting to Google sign-up...');
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Google sign-up failed.');
-      }
+      setError('Google sign-up failed.');
     } finally {
       setLoading(false);
     }

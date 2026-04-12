@@ -1,5 +1,5 @@
-import { geocodeCity, getForecastByCoords } from '../lib/api/weatherApi';
-import { getAlternativeRoutes } from '../lib/api/mapsApi';
+import { getForecastByCoords } from '../lib/api/weatherApi';
+import { geocodeRouteLocation, getAlternativeRoutes } from '../lib/api/mapsApi';
 
 function parseCity(location) {
   if (!location) return null;
@@ -63,15 +63,25 @@ export async function buildRouteIntelligence(shipment) {
 
   const originCity = parseCity(shipment.origin);
   const destinationCity = parseCity(shipment.destination);
-  const [originGeo, destinationGeo] = await Promise.all([
-    geocodeCity(originCity),
-    geocodeCity(destinationCity),
-  ]);
+  let originGeo = null;
+  let destinationGeo = null;
+  let geocodeError = null;
+
+  try {
+    [originGeo, destinationGeo] = await Promise.all([
+      geocodeRouteLocation(originCity),
+      geocodeRouteLocation(destinationCity),
+    ]);
+  } catch (error) {
+    geocodeError = error;
+  }
 
   if (!originGeo || !destinationGeo) {
     return {
       source: 'limited',
-      summary: 'Route intelligence unavailable due to missing coordinates.',
+      summary: geocodeError
+        ? `Route intelligence unavailable due to geocoding issue: ${geocodeError.message}`
+        : 'Route intelligence unavailable due to missing coordinates.',
       horizonRisk: [],
       overallWeatherRisk: 20,
       alternatives: [],
@@ -80,10 +90,17 @@ export async function buildRouteIntelligence(shipment) {
     };
   }
 
-  const [originForecast, destinationForecast] = await Promise.all([
-    getForecastByCoords(originGeo.lat, originGeo.lon),
-    getForecastByCoords(destinationGeo.lat, destinationGeo.lon),
-  ]);
+  let originForecast = [];
+  let destinationForecast = [];
+  let weatherUnavailableReason = null;
+  try {
+    [originForecast, destinationForecast] = await Promise.all([
+      getForecastByCoords(originGeo.lat, originGeo.lon),
+      getForecastByCoords(destinationGeo.lat, destinationGeo.lon),
+    ]);
+  } catch (error) {
+    weatherUnavailableReason = error.message;
+  }
 
   const now = Date.now();
   const etaTs = shipment.eta ? new Date(shipment.eta).getTime() : now + 24 * 3600 * 1000;
@@ -111,11 +128,26 @@ export async function buildRouteIntelligence(shipment) {
     ? Math.max(...horizonRisk.map((r) => r.riskScore))
     : 20;
 
-  const alternatives = await getAlternativeRoutes({
-    origin: originGeo,
-    destination: destinationGeo,
-    mode: shipment.mode,
-  });
+  let alternatives = [];
+  try {
+    alternatives = await getAlternativeRoutes({
+      origin: originGeo,
+      destination: destinationGeo,
+      mode: shipment.mode,
+    });
+  } catch (error) {
+    return {
+      source: 'routing-unavailable',
+      origin: originGeo,
+      destination: destinationGeo,
+      horizonRisk,
+      overallWeatherRisk,
+      alternatives: [],
+      recommendedRoute: null,
+      summary: `Routing provider error: ${error.message}`,
+      generatedAt: new Date().toISOString(),
+    };
+  }
 
   const evaluatedAlternatives = alternatives
     .map((route, idx) => {
@@ -142,19 +174,20 @@ export async function buildRouteIntelligence(shipment) {
     : null;
 
   return {
-    source: evaluatedAlternatives.some((r) => r.source === 'google') ? 'google+weather' : 'heuristic+weather',
+    source: evaluatedAlternatives.some((r) => r.source === 'google') ? 'google+weather' : 'osrm+weather',
     origin: originGeo,
     destination: destinationGeo,
     horizonRisk,
     overallWeatherRisk,
     alternatives: evaluatedAlternatives,
     recommendedRoute,
-    summary:
-      overallWeatherRisk >= 60
-        ? 'Severe weather risk expected on this route window. Rerouting is advised.'
-        : overallWeatherRisk >= 35
-        ? 'Moderate weather disruptions expected. Monitor and prepare alternate route.'
-        : 'Weather risk is currently manageable along this route.',
+    summary: weatherUnavailableReason
+      ? `Route alternatives available. Weather data unavailable: ${weatherUnavailableReason}`
+      : overallWeatherRisk >= 60
+      ? 'Severe weather risk expected on this route window. Rerouting is advised.'
+      : overallWeatherRisk >= 35
+      ? 'Moderate weather disruptions expected. Monitor and prepare alternate route.'
+      : 'Weather risk is currently manageable along this route.',
     generatedAt: new Date().toISOString(),
   };
 }

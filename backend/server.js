@@ -63,11 +63,12 @@ if (sentryDsn) {
 const OPENWEATHER_KEY = env.OPENWEATHER_API_KEY || '';
 const NEWS_KEY = env.NEWS_API_KEY || '';
 const GOOGLE_MAPS_KEY = env.GOOGLE_MAPS_API_KEY || '';
+const OSRM_BASE_URL = String(env.OSRM_BASE_URL || 'https://router.project-osrm.org').replace(/\/$/, '');
 
 const app = express();
 const port = Number(env.PORT) || 8787;
 app.set('trust proxy', 1);
-const allowedOrigins = (env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173')
+const allowedOrigins = (env.ALLOWED_ORIGINS || 'http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,http://localhost:5173,http://127.0.0.1:5173')
   .split(',')
   .map((item) => item.trim())
   .filter(Boolean);
@@ -711,10 +712,6 @@ app.get('/api/weather/by-city', asyncHandler(async (req, res) => {
   if (!city) {
     res.status(400).json({ error: 'city query parameter is required' });
     return;
-      queueAuditEvent({
-        eventType: 'webhook.retry.completed',
-        details: { retryDocId: docSnap.id, shipments: shipments.length, attempts },
-      });
   }
 
   const uri = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${OPENWEATHER_KEY}&units=metric`;
@@ -724,16 +721,6 @@ app.get('/api/weather/by-city', asyncHandler(async (req, res) => {
     res.status(upstream.status).json({ error: data.message || 'Weather API request failed' });
     return;
   }
-      queueAuditEvent({
-        eventType: 'webhook.retry.failed',
-        severity: nextAttempts >= webhookRetryMaxAttempts ? 'error' : 'warning',
-        details: {
-          retryDocId: docSnap.id,
-          attempts: nextAttempts,
-          maxAttempts: webhookRetryMaxAttempts,
-          error: String(error.message || error),
-        },
-      });
   res.json(data);
 }));
 
@@ -805,6 +792,43 @@ app.get('/api/weather/forecast', asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
+app.get('/api/routes/geocode', asyncHandler(async (req, res) => {
+  const city = String(req.query.city || '').trim();
+  if (!city) {
+    res.status(400).json({ error: 'city query parameter is required' });
+    return;
+  }
+
+  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(city)}`;
+  const upstream = await fetch(url, {
+    headers: {
+      'User-Agent': 'ShipGuardAI/1.0 (routing-geocoder)',
+      Accept: 'application/json',
+    },
+  });
+
+  const data = await upstream.json();
+  if (!upstream.ok) {
+    res.status(upstream.status).json({ error: 'Routing geocoding request failed' });
+    return;
+  }
+
+  if (!Array.isArray(data) || !data.length) {
+    res.json([]);
+    return;
+  }
+
+  const match = data[0];
+  res.json([
+    {
+      name: city,
+      lat: Number(match.lat),
+      lon: Number(match.lon),
+      displayName: match.display_name,
+    },
+  ]);
+}));
+
 function haversineKm(lat1, lon1, lat2, lon2) {
   const R = 6371;
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
@@ -825,33 +849,37 @@ function parseDurationMinutes(durationText) {
   return Number.isFinite(seconds) ? Math.max(1, Math.round(seconds / 60)) : null;
 }
 
-function buildHeuristicAlternatives(origin, destination, mode) {
-  const distanceKm = haversineKm(origin.lat, origin.lon, destination.lat, destination.lon);
-  const speedKmh = mode === 'air' ? 700 : mode === 'sea' ? 32 : mode === 'rail' ? 70 : 55;
-  const baseMinutes = Math.max(30, Math.round((distanceKm / speedKmh) * 60));
+async function getOsrmRoutes(origin, destination) {
+  const coordinates = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
+  const params = new URLSearchParams({
+    alternatives: '3',
+    overview: 'full',
+    geometries: 'polyline',
+    steps: 'false',
+  });
 
-  const variants = [
-    { name: 'Primary Corridor', factor: 1.0, fuelFactor: 1.0 },
-    { name: 'Balanced Alternate', factor: 0.92, fuelFactor: 1.08 },
-    { name: 'Weather Avoidance Path', factor: 1.12, fuelFactor: 1.15 },
-  ];
+  const upstream = await fetch(`${OSRM_BASE_URL}/route/v1/driving/${coordinates}?${params.toString()}`);
+  const data = await upstream.json();
+  if (!upstream.ok) {
+    throw new Error(data?.message || 'OSRM route request failed');
+  }
 
-  return variants.map((variant, idx) => ({
-    id: `heuristic-${idx}`,
-    name: variant.name,
-    source: 'heuristic',
-    distanceKm: Math.round(distanceKm),
-    durationMin: Math.max(25, Math.round(baseMinutes * variant.factor)),
-    fuelImpactPercent: Math.round((variant.fuelFactor - 1) * 100),
-    warnings: idx === 2 ? ['Longer travel time due to avoidance detour'] : [],
-    polyline: null,
+  return (data.routes || []).map((route, idx) => ({
+    id: `osrm-${idx}`,
+    name: idx === 0 ? 'Primary Corridor' : `Alternate ${idx}`,
+    source: 'osrm',
+    distanceKm: Math.round((route.distance || 0) / 1000),
+    durationMin: Math.max(1, Math.round((route.duration || 0) / 60)),
+    fuelImpactPercent: idx === 0 ? 0 : Math.round(3 + idx * 4),
+    warnings: [],
+    polyline: route.geometry || null,
   }));
 }
 
 app.post('/api/routes/alternatives', asyncHandler(async (req, res) => {
   const origin = req.body?.origin;
   const destination = req.body?.destination;
-  const mode = String(req.body?.mode || 'road');
+  const requestedMode = String(req.body?.mode || 'road').toLowerCase();
 
   if (!origin || !destination) {
     res.status(400).json({ error: 'origin and destination are required' });
@@ -868,74 +896,24 @@ app.post('/api/routes/alternatives', asyncHandler(async (req, res) => {
     return;
   }
 
-  const travelMode = mode === 'road' || mode === 'rail' || mode === 'multimodal' ? 'DRIVE' : null;
-  if (!travelMode || !GOOGLE_MAPS_KEY) {
-    res.json({
-      source: 'heuristic',
-      routes: buildHeuristicAlternatives(
-        { lat: originLat, lon: originLon },
-        { lat: destinationLat, lon: destinationLon },
-        mode
-      ),
-    });
+  // OSRM provides road-network routes. For non-road shipment modes, we still provide
+  // road corridor intelligence as a practical reroute signal.
+  const routingMode = 'road';
+
+  const routes = await getOsrmRoutes(
+    { lat: originLat, lon: originLon },
+    { lat: destinationLat, lon: destinationLon }
+  );
+  if (!routes.length) {
+    res.status(503).json({ error: 'OSRM did not return any alternative routes' });
     return;
   }
-
-  const body = {
-    origin: { location: { latLng: { latitude: originLat, longitude: originLon } } },
-    destination: { location: { latLng: { latitude: destinationLat, longitude: destinationLon } } },
-    travelMode,
-    computeAlternativeRoutes: true,
-    routingPreference: 'TRAFFIC_AWARE',
-    languageCode: 'en-US',
-    units: 'METRIC',
-  };
-
-  const fieldMask = [
-    'routes.duration',
-    'routes.distanceMeters',
-    'routes.polyline.encodedPolyline',
-    'routes.legs',
-    'routes.warnings',
-    'routes.routeLabels',
-  ].join(',');
-
-  const upstream = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Goog-Api-Key': GOOGLE_MAPS_KEY,
-      'X-Goog-FieldMask': fieldMask,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await upstream.json();
-  if (!upstream.ok) {
-    res.status(upstream.status).json({
-      error: data.error?.message || data.message || 'Google Routes API request failed',
-    });
-    return;
-  }
-
-  const routes = (data.routes || []).map((route, idx) => ({
-    id: `google-${idx}`,
-    name: route.routeLabels?.[0] || `Route ${idx + 1}`,
-    source: 'google',
-    distanceKm: Math.round((route.distanceMeters || 0) / 1000),
-    durationMin: parseDurationMinutes(route.duration),
-    fuelImpactPercent: idx === 0 ? 0 : Math.round(4 + idx * 3),
-    warnings: route.warnings || [],
-    polyline: route.polyline?.encodedPolyline || null,
-  }));
 
   res.json({
-    source: 'google',
-    routes: routes.length ? routes : buildHeuristicAlternatives(
-      { lat: originLat, lon: originLon },
-      { lat: destinationLat, lon: destinationLon },
-      mode
-    ),
+    source: 'osrm',
+    requestedMode,
+    routingMode,
+    routes,
   });
 }));
 

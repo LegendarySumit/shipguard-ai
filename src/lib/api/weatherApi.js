@@ -1,6 +1,16 @@
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 import { fetchWithRetry } from './fetchWithRetry';
 
+let backendCooldownUntil = 0;
+
+function canUseBackend() {
+  return Boolean(BACKEND_URL) && Date.now() >= backendCooldownUntil;
+}
+
+function markBackendTemporarilyUnavailable() {
+  backendCooldownUntil = Date.now() + 30_000;
+}
+
 function mapWeatherPayload(data) {
   return {
     city: data.name,
@@ -14,6 +24,7 @@ function mapWeatherPayload(data) {
     windSpeed: Math.round((data.wind?.speed || 0) * 3.6),
     visibility: data.visibility ? data.visibility / 1000 : 10,
     pressure: data.main?.pressure,
+    source: 'openweather',
   };
 }
 
@@ -28,122 +39,97 @@ function mapForecastPayload(data) {
     humidity: item.main?.humidity,
     precipProbability: item.pop || 0,
     rainVolume: item.rain?.['3h'] || 0,
+    source: 'openweather',
   }));
 }
 
 async function fetchJson(url, errorLabel) {
   const res = await fetchWithRetry(url);
-  if (!res.ok) throw new Error(errorLabel);
+  if (!res.ok) {
+    let reason = errorLabel;
+    try {
+      const payload = await res.json();
+      reason = payload?.error || payload?.message || reason;
+    } catch {
+      // Keep generic reason when response body is not JSON.
+    }
+    throw new Error(`${errorLabel}: ${reason}`);
+  }
   return res.json();
 }
 
 export async function getWeatherByCity(city) {
-  if (BACKEND_URL) {
-    try {
-      const data = await fetchJson(
-        `${BACKEND_URL}/api/weather/by-city?city=${encodeURIComponent(city)}`,
-        'Backend weather API error'
-      );
-      return mapWeatherPayload(data);
-    } catch (e) {
-      console.warn('Backend weather API failed, using mock weather:', e.message);
-    }
+  if (!canUseBackend()) {
+    throw new Error('Backend weather API unavailable. Ensure backend server is running.');
   }
 
-  return getMockWeather(city);
+  try {
+    const data = await fetchJson(
+      `${BACKEND_URL}/api/weather/by-city?city=${encodeURIComponent(city)}`,
+      'Backend weather API error'
+    );
+    return mapWeatherPayload(data);
+  } catch (e) {
+    markBackendTemporarilyUnavailable();
+    throw e;
+  }
 }
 
 export async function getWeatherByCoords(lat, lon) {
-  if (BACKEND_URL) {
-    try {
-      const data = await fetchJson(
-        `${BACKEND_URL}/api/weather/by-coords?lat=${lat}&lon=${lon}`,
-        'Backend weather API error'
-      );
-      return mapWeatherPayload(data);
-    } catch (e) {
-      console.warn('Backend weather-by-coords failed, using mock weather:', e.message);
-    }
+  if (!canUseBackend()) {
+    throw new Error('Backend weather API unavailable. Ensure backend server is running.');
   }
 
-  return getMockWeather('Unknown');
+  try {
+    const data = await fetchJson(
+      `${BACKEND_URL}/api/weather/by-coords?lat=${lat}&lon=${lon}`,
+      'Backend weather API error'
+    );
+    return mapWeatherPayload(data);
+  } catch (e) {
+    markBackendTemporarilyUnavailable();
+    throw e;
+  }
 }
 
 export async function geocodeCity(city) {
   if (!city) return null;
-
-  if (BACKEND_URL) {
-    try {
-      const data = await fetchJson(
-        `${BACKEND_URL}/api/weather/geocode?city=${encodeURIComponent(city)}`,
-        'Backend geocoding API error'
-      );
-      const match = data?.[0];
-      if (!match) return null;
-      return {
-        name: match.name,
-        country: match.country,
-        lat: match.lat,
-        lon: match.lon,
-      };
-    } catch (e) {
-      console.warn('Backend geocoding failed:', e.message);
-    }
+  if (!canUseBackend()) {
+    throw new Error('Backend geocoding API unavailable. Ensure backend server is running.');
   }
 
-  return null;
+  try {
+    const data = await fetchJson(
+      `${BACKEND_URL}/api/weather/geocode?city=${encodeURIComponent(city)}`,
+      'Backend geocoding API error'
+    );
+    const match = data?.[0];
+    if (!match) return null;
+    return {
+      name: match.name,
+      country: match.country,
+      lat: match.lat,
+      lon: match.lon,
+    };
+  } catch (e) {
+    markBackendTemporarilyUnavailable();
+    throw e;
+  }
 }
 
 export async function getForecastByCoords(lat, lon) {
-  if (BACKEND_URL) {
-    try {
-      const data = await fetchJson(
-        `${BACKEND_URL}/api/weather/forecast?lat=${lat}&lon=${lon}`,
-        'Backend forecast API error'
-      );
-      return mapForecastPayload(data);
-    } catch (e) {
-      console.warn('Backend forecast API failed, using mock forecast:', e.message);
-    }
+  if (!canUseBackend()) {
+    throw new Error('Backend forecast API unavailable. Ensure backend server is running.');
   }
 
-  return getMockForecast();
-}
-
-function getMockWeather(city) {
-  const conditions = ['Clear', 'Clouds', 'Rain', 'Snow', 'Thunderstorm', 'Mist', 'Drizzle'];
-  const cond = conditions[Math.floor(Math.random() * conditions.length)];
-  return {
-    city,
-    country: 'XX',
-    condition: cond,
-    description: cond.toLowerCase(),
-    temperature: Math.round(Math.random() * 35 - 5),
-    feelsLike: Math.round(Math.random() * 35 - 5),
-    humidity: Math.round(Math.random() * 60 + 30),
-    windSpeed: Math.round(Math.random() * 50),
-    visibility: Math.round(Math.random() * 10 + 2),
-    pressure: Math.round(Math.random() * 30 + 1000),
-    isMock: true,
-  };
-}
-
-function getMockForecast() {
-  const conditions = ['Clear', 'Clouds', 'Rain', 'Thunderstorm', 'Mist'];
-  return Array.from({ length: 12 }, (_, i) => {
-    const ts = new Date(Date.now() + i * 3 * 3600000).toISOString();
-    const cond = conditions[Math.floor(Math.random() * conditions.length)];
-    return {
-      timestamp: ts,
-      condition: cond,
-      description: cond.toLowerCase(),
-      temperature: Math.round(Math.random() * 30),
-      windSpeed: Math.round(Math.random() * 55),
-      visibility: Math.round(Math.random() * 10 + 1),
-      humidity: Math.round(Math.random() * 60 + 30),
-      precipProbability: Math.random(),
-      rainVolume: Math.round(Math.random() * 8),
-      isMock: true,
-    };
-  });
+  try {
+    const data = await fetchJson(
+      `${BACKEND_URL}/api/weather/forecast?lat=${lat}&lon=${lon}`,
+      'Backend forecast API error'
+    );
+    return mapForecastPayload(data);
+  } catch (e) {
+    markBackendTemporarilyUnavailable();
+    throw e;
+  }
 }

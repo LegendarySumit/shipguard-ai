@@ -3,7 +3,7 @@ import {
   browserSessionPersistence,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   onAuthStateChanged,
   setPersistence,
@@ -20,6 +20,16 @@ const SESSION_TIMEOUT_MS = SESSION_TIMEOUT_MINUTES * 60 * 1000;
 const DEFAULT_NOTIFICATIONS = { email: true, push: true, sms: false };
 const DEFAULT_PREFERENCES = { riskThreshold: 60, slaWarningHours: 48, digestTime: '08:00' };
 const DEFAULT_INTEGRATIONS = { weatherApiKey: '', mapsApiKey: '', newsApiKey: '' };
+
+function isFirestoreOfflineError(error) {
+  const code = String(error?.code || '').toLowerCase();
+  const message = String(error?.message || '').toLowerCase();
+  return (
+    code.includes('unavailable') ||
+    message.includes('client is offline') ||
+    message.includes('could not reach cloud firestore backend')
+  );
+}
 
 export function useAuth() {
   const ctx = useContext(AuthContext);
@@ -106,9 +116,8 @@ export function AuthProvider({ children }) {
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
     markActivity();
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      await createUserDoc(result.user);
-      return result;
+      await signInWithRedirect(auth, googleProvider);
+      return null;
     } catch (e) {
       sessionStorage.removeItem(AUTH_SESSION_FLAG);
       throw e;
@@ -173,7 +182,24 @@ export function AuthProvider({ children }) {
           try {
             await createUserDoc(user);
           } catch (e) {
-            console.error('Failed to load user profile:', e);
+            if (isFirestoreOfflineError(e)) {
+              setUserProfile((prev) =>
+                prev || {
+                  id: user.uid,
+                  displayName: user.displayName || '',
+                  email: user.email || '',
+                  photoURL: user.photoURL || null,
+                  role: 'analyst',
+                  company: '',
+                  notifications: DEFAULT_NOTIFICATIONS,
+                  preferences: DEFAULT_PREFERENCES,
+                  integrations: DEFAULT_INTEGRATIONS,
+                }
+              );
+              console.warn('Firestore is offline; using temporary profile until reconnection.');
+            } else {
+              console.error('Failed to load user profile:', e);
+            }
           }
         } else {
           setUserProfile(null);
@@ -215,6 +241,23 @@ export function AuthProvider({ children }) {
     }, 60 * 1000);
 
     return () => clearInterval(timer);
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+
+    const tryReloadProfile = async () => {
+      try {
+        await createUserDoc(currentUser);
+      } catch (e) {
+        if (!isFirestoreOfflineError(e)) {
+          console.error('Failed to refresh user profile after reconnect:', e);
+        }
+      }
+    };
+
+    window.addEventListener('online', tryReloadProfile);
+    return () => window.removeEventListener('online', tryReloadProfile);
   }, [currentUser]);
 
   const value = {

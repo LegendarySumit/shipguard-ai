@@ -76,6 +76,12 @@ function decorateShipments(shipments) {
   });
 }
 
+function hasRouteContext(shipment) {
+  const origin = String(shipment?.origin || '').trim();
+  const destination = String(shipment?.destination || '').trim();
+  return Boolean(origin && destination);
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const [shipments, setShipments] = useState([]);
@@ -96,6 +102,7 @@ export default function Dashboard() {
         let routeRecs = await getRouteRecommendations({ status: 'active', limit: 8 });
         if (!routeRecs.length && processed.length) {
           const candidates = [...processed]
+            .filter((s) => hasRouteContext(s))
             .filter((s) => s.riskScore >= 50)
             .sort((a, b) => b.riskScore - a.riskScore)
             .slice(0, 3);
@@ -188,9 +195,29 @@ export default function Dashboard() {
     { name: 'Low', value: shipments.filter(s => s.riskLevel === 'low').length, color: '#22c55e' },
   ], [shipments]);
 
-  const topRiskShipments = useMemo(() =>
-    [...shipments].sort((a, b) => b.riskScore - a.riskScore).slice(0, 6),
-  [shipments]);
+  const topRiskShipments = useMemo(() => {
+    const sorted = [...shipments].sort((a, b) => b.riskScore - a.riskScore);
+    const routeReady = sorted.filter((s) => hasRouteContext(s));
+
+    const activeAlertShipmentIds = new Set(
+      alerts
+        .filter((a) => a.status === 'active')
+        .flatMap((a) => [a.shipmentId, a.trackingId])
+        .filter(Boolean)
+        .map((id) => String(id))
+    );
+
+    const prioritized = routeReady.filter(
+      (s) => activeAlertShipmentIds.has(String(s.id)) || activeAlertShipmentIds.has(String(s.trackingId))
+    );
+
+    const prioritizedKeys = new Set(prioritized.map((s) => String(s.id || s.trackingId)));
+    const remaining = routeReady.filter((s) => !prioritizedKeys.has(String(s.id || s.trackingId)));
+    const merged = [...prioritized, ...remaining];
+
+    // Fallback to risk-sorted rows if route-ready data is unavailable.
+    return (merged.length ? merged : sorted).slice(0, 6);
+  }, [shipments, alerts]);
 
   if (loading) {
     return (

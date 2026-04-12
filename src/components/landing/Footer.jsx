@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { useAuth } from '../../contexts/AuthContext';
 
 const footerLinks = {
   Explore: [
@@ -7,38 +6,25 @@ const footerLinks = {
     { label: 'Pricing', href: '#pricing' },
     { label: 'How It Works', href: '#how-it-works' },
   ],
-  Platform: [],
+  Resources: [
+    { label: 'Dashboard', href: '/dashboard' },
+    { label: 'Shipments', href: '/shipments' },
+    { label: 'Alerts', href: '/alerts' },
+  ],
 };
 
 const socialLinks = [
-  { label: 'LinkedIn', href: '#' },
-  { label: 'GitHub', href: '#' },
-  { label: 'X / Twitter', href: '#' },
+  { label: 'LinkedIn', href: 'https://www.linkedin.com/' },
+  { label: 'GitHub', href: 'https://github.com/LegendarySumit/shipguard-ai' },
+  { label: 'X / Twitter', href: 'https://x.com/' },
 ];
 
 export default function Footer() {
-  const { currentUser } = useAuth();
-
   const scrollTo = (href) => {
     if (href.startsWith('#') && href !== '#') {
       const el = document.querySelector(href);
       if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
-  };
-
-  const platformLinks = currentUser
-    ? [
-      { label: 'Dashboard', href: '/dashboard' },
-      { label: 'Analytics', href: '/analytics' },
-    ]
-    : [
-      { label: 'Sign In', href: '/login' },
-      { label: 'Create Account', href: '/register' },
-    ];
-
-  const resolvedFooterLinks = {
-    ...footerLinks,
-    Platform: platformLinks,
   };
 
   return (
@@ -59,7 +45,7 @@ export default function Footer() {
             </p>
           </div>
 
-          {Object.entries(resolvedFooterLinks).map(([heading, links]) => (
+          {Object.entries(footerLinks).map(([heading, links]) => (
             <div key={heading}>
               <h4 className="text-[11px] font-black uppercase tracking-widest text-slate-300 mb-4">{heading}</h4>
               <ul className="space-y-3">
@@ -90,6 +76,8 @@ export default function Footer() {
                 <li key={label}>
                   <a
                     href={href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-sm text-slate-500 hover:text-white transition-colors"
                   >
                     {label}

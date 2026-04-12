@@ -1,6 +1,16 @@
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 import { fetchWithRetry } from './fetchWithRetry';
 
+let backendCooldownUntil = 0;
+
+function canUseBackend() {
+  return Boolean(BACKEND_URL) && Date.now() >= backendCooldownUntil;
+}
+
+function markBackendTemporarilyUnavailable() {
+  backendCooldownUntil = Date.now() + 30_000;
+}
+
 function mapNewsItems(articles = []) {
   return articles.map((a) => ({
     title: a.title,
@@ -14,13 +24,14 @@ function mapNewsItems(articles = []) {
 }
 
 export async function getLogisticsNews() {
-  if (BACKEND_URL) {
+  if (canUseBackend()) {
     try {
       const res = await fetchWithRetry(`${BACKEND_URL}/api/news/logistics`);
       if (!res.ok) throw new Error('Backend News API proxy error');
       const data = await res.json();
       return mapNewsItems(data.articles || []);
     } catch (e) {
+      markBackendTemporarilyUnavailable();
       console.warn('Backend News API failed, using mock logistics news:', e.message);
     }
   }

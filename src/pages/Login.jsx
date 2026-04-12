@@ -44,12 +44,9 @@ export default function Login() {
     setLoading(true);
     try {
       await loginWithGoogle();
-      toast.success('Welcome back!');
-      navigate('/dashboard');
+      toast.success('Redirecting to Google sign-in...');
     } catch (err) {
-      if (err.code !== 'auth/popup-closed-by-user') {
-        setError('Google sign-in failed. Please try again.');
-      }
+      setError('Google sign-in failed. Please try again.');
     } finally {
       setLoading(false);
     }

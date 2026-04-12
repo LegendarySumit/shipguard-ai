@@ -53,8 +53,13 @@ export default function ShipmentDetail() {
         // Fetch live weather for destination
         if (data.destination) {
           const city = data.destination.split(',')[0].trim();
-          const w = await getWeatherByCity(city);
-          setWeather(w);
+          try {
+            const w = await getWeatherByCity(city);
+            setWeather(w);
+          } catch (weatherError) {
+            console.warn('Live weather unavailable:', weatherError.message);
+            setWeather(null);
+          }
         }
       } catch (e) {
         console.error(e);
@@ -353,9 +358,9 @@ export default function ShipmentDetail() {
             <div className="flex items-center gap-2 mb-4">
               <Route className="w-4 h-4 text-indigo-600" />
               <h3 className="text-sm font-semibold text-slate-700">Route Intelligence</h3>
-              {routeIntelligence?.source && routeIntelligence.source.includes('heuristic') && (
-                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">
-                  Fallback
+              {routeIntelligence?.source && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 uppercase tracking-wide">
+                  {routeIntelligence.source}
                 </span>
               )}
             </div>
@@ -504,20 +509,29 @@ export default function ShipmentDetail() {
           <div className="flex items-center gap-2 mb-4">
             <Cloud className="w-4 h-4 text-blue-500" />
             <h3 className="text-sm font-semibold text-slate-700">Weather at Destination</h3>
-            {weather?.isMock && (
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">
-                Mock
+            {!weather && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-700 uppercase tracking-wide">
+                Unavailable
               </span>
             )}
           </div>
           {(() => {
-            const temp    = weather ? weather.temperature   : (shipment.weather?.temperature ?? 20);
-            const desc    = weather ? (weather.description || weather.condition) : (shipment.weather?.condition || 'Unknown');
-            const city    = weather ? weather.city          : shipment.destination?.split(',')[0];
-            const country = weather ? weather.country       : '';
-            const wind    = weather ? weather.windSpeed     : (shipment.weather?.windSpeed ?? 0);
-            const vis     = weather ? weather.visibility    : (shipment.weather?.visibility ?? 10);
-            const hum     = weather ? weather.humidity      : (shipment.weather?.humidity ?? 50);
+            if (!weather) {
+              return (
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
+                  <p className="text-sm font-semibold text-slate-700">Real-time weather unavailable</p>
+                  <p className="text-xs text-slate-500 mt-1">Check backend weather API key and quota in OpenWeather.</p>
+                </div>
+              );
+            }
+
+            const temp = weather.temperature;
+            const desc = weather.description || weather.condition;
+            const city = weather.city;
+            const country = weather.country;
+            const wind = weather.windSpeed;
+            const vis = weather.visibility;
+            const hum = weather.humidity;
             return (
               <div>
                 <div className="flex items-end justify-between mb-4">

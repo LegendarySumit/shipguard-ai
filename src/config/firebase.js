@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getAnalytics, isSupported } from 'firebase/analytics';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -15,6 +15,13 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
+const forceLongPolling =
+  String(import.meta.env.VITE_FIRESTORE_FORCE_LONG_POLLING || '').toLowerCase() === 'true' ||
+  import.meta.env.DEV;
+
+const autoDetectLongPolling =
+  String(import.meta.env.VITE_FIRESTORE_AUTO_DETECT_LONG_POLLING || 'true').toLowerCase() !== 'false';
+
 export const analyticsPromise =
   typeof window !== 'undefined'
     ? isSupported()
@@ -23,6 +30,10 @@ export const analyticsPromise =
     : Promise.resolve(null);
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db = initializeFirestore(app, {
+  experimentalForceLongPolling: forceLongPolling,
+  experimentalAutoDetectLongPolling: forceLongPolling ? false : autoDetectLongPolling,
+  useFetchStreams: !forceLongPolling,
+});
 export const googleProvider = new GoogleAuthProvider();
 export default app;
