@@ -9,11 +9,25 @@ import ErrorBoundary from './components/ui/ErrorBoundary';
 import './index.css';
 
 const sentryDsn = import.meta.env.VITE_SENTRY_DSN;
-if (sentryDsn) {
+const sentryEnableDev = String(import.meta.env.VITE_SENTRY_ENABLE_DEV || '').toLowerCase() === 'true';
+const sentryEnabled = Boolean(sentryDsn) && (import.meta.env.PROD || sentryEnableDev);
+
+if (sentryEnabled) {
   Sentry.init({
     dsn: sentryDsn,
     environment: import.meta.env.MODE,
     tracesSampleRate: Number(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE || 0.1),
+    ignoreErrors: [
+      /Failed to fetch dynamically imported module/i,
+      /Importing a module script failed/i,
+    ],
+    beforeSend(event, hint) {
+      const errorMessage = String(hint?.originalException?.message || '').toLowerCase();
+      if (errorMessage.includes('failed to fetch dynamically imported module')) {
+        return null;
+      }
+      return event;
+    },
   });
   window.Sentry = Sentry;
 }
