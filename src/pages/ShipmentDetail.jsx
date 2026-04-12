@@ -353,6 +353,11 @@ export default function ShipmentDetail() {
             <div className="flex items-center gap-2 mb-4">
               <Route className="w-4 h-4 text-indigo-600" />
               <h3 className="text-sm font-semibold text-slate-700">Route Intelligence</h3>
+              {routeIntelligence?.source && routeIntelligence.source.includes('heuristic') && (
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">
+                  Fallback
+                </span>
+              )}
             </div>
 
             {routeIntelLoading ? (
@@ -499,6 +504,11 @@ export default function ShipmentDetail() {
           <div className="flex items-center gap-2 mb-4">
             <Cloud className="w-4 h-4 text-blue-500" />
             <h3 className="text-sm font-semibold text-slate-700">Weather at Destination</h3>
+            {weather?.isMock && (
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">
+                Mock
+              </span>
+            )}
           </div>
           {(() => {
             const temp    = weather ? weather.temperature   : (shipment.weather?.temperature ?? 20);

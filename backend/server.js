@@ -2,9 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import * as Sentry from '@sentry/node';
 import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
+import helmet from 'helmet';
+import morgan from 'morgan';
+import Joi from 'joi';
 import admin from 'firebase-admin';
 
 function parseEnvFile(filePath) {
@@ -44,8 +48,21 @@ const env = {
   ...process.env,
 };
 
+const sentryDsn = String(env.SENTRY_DSN || '').trim();
+const sentryEnvironment = String(env.SENTRY_ENVIRONMENT || env.NODE_ENV || 'development').trim();
+const sentryTracesSampleRate = Number(env.SENTRY_TRACES_SAMPLE_RATE || 0.1);
+
+if (sentryDsn) {
+  Sentry.init({
+    dsn: sentryDsn,
+    environment: sentryEnvironment,
+    tracesSampleRate: Number.isFinite(sentryTracesSampleRate) ? sentryTracesSampleRate : 0.1,
+  });
+}
+
 const OPENWEATHER_KEY = env.OPENWEATHER_API_KEY || '';
 const NEWS_KEY = env.NEWS_API_KEY || '';
+const GOOGLE_MAPS_KEY = env.GOOGLE_MAPS_API_KEY || '';
 
 const app = express();
 const port = Number(env.PORT) || 8787;
@@ -58,7 +75,7 @@ const allowedOrigins = (env.ALLOWED_ORIGINS || 'http://localhost:5173,http://127
 const webhookRequireHmac = String(env.WEBHOOK_REQUIRE_HMAC || 'false').toLowerCase() === 'true';
 const webhookAllowLegacySecret = String(env.WEBHOOK_ALLOW_LEGACY_SECRET || 'true').toLowerCase() === 'true';
 const webhookTimestampToleranceSec = Math.max(30, Number(env.WEBHOOK_TIMESTAMP_TOLERANCE_SEC) || 300);
-const apiRateLimitPerMinute = Math.max(30, Number(env.API_RATE_LIMIT_PER_MINUTE) || 300);
+const apiRateLimitPerMinute = Math.max(1, Number(env.API_RATE_LIMIT_PER_MINUTE) || 100);
 const webhookRateLimitPerMinute = Math.max(10, Number(env.WEBHOOK_RATE_LIMIT_PER_MINUTE) || 120);
 const retentionEnabled = String(env.RETENTION_ENABLED || 'true').toLowerCase() === 'true';
 const retentionDays = Math.max(30, Number(env.RETENTION_DAYS) || 365);
@@ -68,6 +85,7 @@ const webhookRetryEnabled = String(env.WEBHOOK_RETRY_ENABLED || 'true').toLowerC
 const webhookRetryIntervalSec = Math.max(15, Number(env.WEBHOOK_RETRY_INTERVAL_SEC) || 60);
 const webhookRetryMaxAttempts = Math.max(1, Number(env.WEBHOOK_RETRY_MAX_ATTEMPTS) || 6);
 const webhookRetryBatchSize = Math.max(1, Math.min(200, Number(env.WEBHOOK_RETRY_BATCH_SIZE) || 25));
+const cspEnabled = String(env.CSP_ENABLED || 'false').toLowerCase() === 'true';
 
 const asyncHandler = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
@@ -76,7 +94,7 @@ const apiLimiter = rateLimit({
   max: apiRateLimitPerMinute,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many requests' },
+  message: { error: 'Rate limit exceeded. Max 100 requests per minute per IP.' },
 });
 
 const webhookLimiter = rateLimit({
@@ -95,7 +113,34 @@ app.use(cors({
     }
     callback(new Error('Origin not allowed by CORS policy'));
   },
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Webhook-Secret', 'X-Webhook-Signature', 'X-Webhook-Timestamp', 'X-Request-Id'],
+  credentials: false,
 }));
+
+app.use(helmet({
+  contentSecurityPolicy: cspEnabled
+    ? {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        objectSrc: ["'none'"],
+        upgradeInsecureRequests: [],
+      },
+    }
+    : false,
+  crossOriginEmbedderPolicy: false,
+}));
+
+app.use((req, res, next) => {
+  req.requestId = req.headers['x-request-id'] || crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
+
+morgan.token('requestId', (req) => req.requestId || '-');
+app.use(morgan(':date[iso] :remote-addr :method :url :status :response-time ms reqId=:requestId'));
+
 app.use(express.json({
   limit: '2mb',
   verify(req, _res, buf) {
@@ -128,6 +173,50 @@ function deriveEncryptionKey() {
 }
 
 const piiKey = deriveEncryptionKey();
+
+function validateStartupConfiguration() {
+  const errors = [];
+  const warnings = [];
+  const isProd = String(env.NODE_ENV || '').toLowerCase() === 'production';
+
+  if (!String(env.WEBHOOK_SECRET || '').trim()) {
+    errors.push('WEBHOOK_SECRET is required');
+  } else if (String(env.WEBHOOK_SECRET || '').trim().length < 32) {
+    errors.push('WEBHOOK_SECRET must be at least 32 characters long');
+  }
+
+  if (!piiKey) {
+    warnings.push('PII_ENCRYPTION_KEY is missing; customer/product fields may be stored as plaintext fallback.');
+  }
+
+  if (!OPENWEATHER_KEY) warnings.push('OPENWEATHER_API_KEY is not configured; weather endpoints will return 503.');
+  if (!NEWS_KEY) warnings.push('NEWS_API_KEY is not configured; news endpoint will return 503.');
+  if (isProd && !sentryDsn) warnings.push('SENTRY_DSN is not configured in production.');
+
+  return { errors, warnings };
+}
+
+async function writeAuditEvent({ eventType, severity = 'info', details = {}, req = null, actor = 'system' }) {
+  if (!db) return;
+  await db.collection('audit_logs').add({
+    eventType,
+    severity,
+    actor,
+    requestId: req?.requestId || null,
+    ip: req?.ip || null,
+    method: req?.method || null,
+    path: req?.path || null,
+    userAgent: req?.headers?.['user-agent'] || null,
+    details,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+  });
+}
+
+function queueAuditEvent(payload) {
+  writeAuditEvent(payload).catch((error) => {
+    console.warn('[Audit] Failed to write audit event:', error.message);
+  });
+}
 
 function encryptPiiValue(value) {
   if (!piiKey) return null;
@@ -201,6 +290,32 @@ function isAllowedPriority(priority) {
   return ['low', 'standard', 'high', 'urgent', 'critical'].includes(String(priority || '').toLowerCase());
 }
 
+const shipmentSchema = Joi.object({
+  trackingId: Joi.string().trim().max(120).required(),
+  status: Joi.string().valid('pending', 'in_transit', 'delivered', 'delayed', 'cancelled', 'exception').optional(),
+  mode: Joi.string().valid('road', 'rail', 'air', 'sea', 'multimodal').optional(),
+  riskLevel: Joi.string().valid('low', 'medium', 'high', 'critical').optional(),
+  priority: Joi.string().valid('low', 'standard', 'high', 'urgent', 'critical').optional(),
+  carrier: Joi.string().allow('', null).optional(),
+  origin: Joi.string().allow('', null).optional(),
+  destination: Joi.string().allow('', null).optional(),
+  eta: Joi.date().iso().allow(null, '').optional(),
+  departureDate: Joi.date().iso().allow(null, '').optional(),
+  progress: Joi.number().min(0).max(100).optional(),
+  delayHours: Joi.number().min(0).max(3650).optional(),
+  riskScore: Joi.number().min(0).max(100).optional(),
+  items: Joi.number().min(0).max(1000000).optional(),
+  weight: Joi.number().min(0).max(10000000).optional(),
+  isDelayed: Joi.boolean().optional(),
+  weather: Joi.any().optional(),
+  traffic: Joi.any().optional(),
+  port: Joi.any().optional(),
+  route: Joi.any().optional(),
+  product: Joi.string().allow('', null).optional(),
+  customer: Joi.string().allow('', null).optional(),
+  source: Joi.string().allow('', null).optional(),
+}).unknown(true);
+
 function isValidDateValue(value) {
   if (value === null || value === undefined || value === '') return true;
   const parsed = new Date(value);
@@ -208,6 +323,14 @@ function isValidDateValue(value) {
 }
 
 function validateShipmentInput(input, idx) {
+  const schemaCheck = shipmentSchema.validate(input, { abortEarly: false });
+  if (schemaCheck.error) {
+    return schemaCheck.error.details.map((detail) => {
+      const keyPath = detail.path?.length ? detail.path.join('.') : 'payload';
+      return `shipments[${idx}].${keyPath}: ${detail.message.replace(/"/g, '')}`;
+    });
+  }
+
   const errors = [];
   const prefix = `shipments[${idx}]`;
   const trackingId = String(input?.trackingId || '').trim();
@@ -522,6 +645,15 @@ try {
   console.error('Failed to initialize Firebase Admin:', e.message);
 }
 
+const startupValidation = validateStartupConfiguration();
+if (startupValidation.warnings.length) {
+  startupValidation.warnings.forEach((warning) => console.warn(`[Startup validation] ${warning}`));
+}
+if (startupValidation.errors.length) {
+  startupValidation.errors.forEach((message) => console.error(`[Startup validation] ${message}`));
+  process.exit(1);
+}
+
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true,
@@ -556,7 +688,6 @@ app.get('/api/news/logistics', asyncHandler(async (req, res) => {
     });
     return;
   }
-
   res.json({
     status: data.status,
     totalResults: data.totalResults,
@@ -580,6 +711,10 @@ app.get('/api/weather/by-city', asyncHandler(async (req, res) => {
   if (!city) {
     res.status(400).json({ error: 'city query parameter is required' });
     return;
+      queueAuditEvent({
+        eventType: 'webhook.retry.completed',
+        details: { retryDocId: docSnap.id, shipments: shipments.length, attempts },
+      });
   }
 
   const uri = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${OPENWEATHER_KEY}&units=metric`;
@@ -589,6 +724,16 @@ app.get('/api/weather/by-city', asyncHandler(async (req, res) => {
     res.status(upstream.status).json({ error: data.message || 'Weather API request failed' });
     return;
   }
+      queueAuditEvent({
+        eventType: 'webhook.retry.failed',
+        severity: nextAttempts >= webhookRetryMaxAttempts ? 'error' : 'warning',
+        details: {
+          retryDocId: docSnap.id,
+          attempts: nextAttempts,
+          maxAttempts: webhookRetryMaxAttempts,
+          error: String(error.message || error),
+        },
+      });
   res.json(data);
 }));
 
@@ -660,6 +805,140 @@ app.get('/api/weather/forecast', asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function parseDurationMinutes(durationText) {
+  if (!durationText) return null;
+  const seconds = Number(String(durationText).replace('s', ''));
+  return Number.isFinite(seconds) ? Math.max(1, Math.round(seconds / 60)) : null;
+}
+
+function buildHeuristicAlternatives(origin, destination, mode) {
+  const distanceKm = haversineKm(origin.lat, origin.lon, destination.lat, destination.lon);
+  const speedKmh = mode === 'air' ? 700 : mode === 'sea' ? 32 : mode === 'rail' ? 70 : 55;
+  const baseMinutes = Math.max(30, Math.round((distanceKm / speedKmh) * 60));
+
+  const variants = [
+    { name: 'Primary Corridor', factor: 1.0, fuelFactor: 1.0 },
+    { name: 'Balanced Alternate', factor: 0.92, fuelFactor: 1.08 },
+    { name: 'Weather Avoidance Path', factor: 1.12, fuelFactor: 1.15 },
+  ];
+
+  return variants.map((variant, idx) => ({
+    id: `heuristic-${idx}`,
+    name: variant.name,
+    source: 'heuristic',
+    distanceKm: Math.round(distanceKm),
+    durationMin: Math.max(25, Math.round(baseMinutes * variant.factor)),
+    fuelImpactPercent: Math.round((variant.fuelFactor - 1) * 100),
+    warnings: idx === 2 ? ['Longer travel time due to avoidance detour'] : [],
+    polyline: null,
+  }));
+}
+
+app.post('/api/routes/alternatives', asyncHandler(async (req, res) => {
+  const origin = req.body?.origin;
+  const destination = req.body?.destination;
+  const mode = String(req.body?.mode || 'road');
+
+  if (!origin || !destination) {
+    res.status(400).json({ error: 'origin and destination are required' });
+    return;
+  }
+
+  const originLat = Number(origin.lat);
+  const originLon = Number(origin.lon);
+  const destinationLat = Number(destination.lat);
+  const destinationLon = Number(destination.lon);
+
+  if (![originLat, originLon, destinationLat, destinationLon].every(Number.isFinite)) {
+    res.status(400).json({ error: 'origin and destination coordinates must be numeric' });
+    return;
+  }
+
+  const travelMode = mode === 'road' || mode === 'rail' || mode === 'multimodal' ? 'DRIVE' : null;
+  if (!travelMode || !GOOGLE_MAPS_KEY) {
+    res.json({
+      source: 'heuristic',
+      routes: buildHeuristicAlternatives(
+        { lat: originLat, lon: originLon },
+        { lat: destinationLat, lon: destinationLon },
+        mode
+      ),
+    });
+    return;
+  }
+
+  const body = {
+    origin: { location: { latLng: { latitude: originLat, longitude: originLon } } },
+    destination: { location: { latLng: { latitude: destinationLat, longitude: destinationLon } } },
+    travelMode,
+    computeAlternativeRoutes: true,
+    routingPreference: 'TRAFFIC_AWARE',
+    languageCode: 'en-US',
+    units: 'METRIC',
+  };
+
+  const fieldMask = [
+    'routes.duration',
+    'routes.distanceMeters',
+    'routes.polyline.encodedPolyline',
+    'routes.legs',
+    'routes.warnings',
+    'routes.routeLabels',
+  ].join(',');
+
+  const upstream = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Goog-Api-Key': GOOGLE_MAPS_KEY,
+      'X-Goog-FieldMask': fieldMask,
+    },
+    body: JSON.stringify(body),
+  });
+
+  const data = await upstream.json();
+  if (!upstream.ok) {
+    res.status(upstream.status).json({
+      error: data.error?.message || data.message || 'Google Routes API request failed',
+    });
+    return;
+  }
+
+  const routes = (data.routes || []).map((route, idx) => ({
+    id: `google-${idx}`,
+    name: route.routeLabels?.[0] || `Route ${idx + 1}`,
+    source: 'google',
+    distanceKm: Math.round((route.distanceMeters || 0) / 1000),
+    durationMin: parseDurationMinutes(route.duration),
+    fuelImpactPercent: idx === 0 ? 0 : Math.round(4 + idx * 3),
+    warnings: route.warnings || [],
+    polyline: route.polyline?.encodedPolyline || null,
+  }));
+
+  res.json({
+    source: 'google',
+    routes: routes.length ? routes : buildHeuristicAlternatives(
+      { lat: originLat, lon: originLon },
+      { lat: destinationLat, lon: destinationLon },
+      mode
+    ),
+  });
+}));
+
 app.post('/api/webhooks/shipments', webhookLimiter, asyncHandler(async (req, res) => {
   const secret = env.WEBHOOK_SECRET || '';
   if (!secret) {
@@ -674,6 +953,12 @@ app.post('/api/webhooks/shipments', webhookLimiter, asyncHandler(async (req, res
 
   const authResult = authorizeWebhookRequest(req, secret);
   if (!authResult.ok) {
+    queueAuditEvent({
+      eventType: 'webhook.auth.failed',
+      severity: 'warning',
+      req,
+      details: { reason: authResult.reason || 'Unauthorized webhook request' },
+    });
     res.status(authResult.status || 401).json({ error: authResult.reason || 'Unauthorized webhook request' });
     return;
   }
@@ -696,6 +981,14 @@ app.post('/api/webhooks/shipments', webhookLimiter, asyncHandler(async (req, res
 
   const validationErrors = list.flatMap((shipment, idx) => validateShipmentInput(shipment, idx));
   if (validationErrors.length > 0) {
+    queueAuditEvent({
+      eventType: 'webhook.validation.failed',
+      severity: 'warning',
+      req,
+      details: {
+        validationErrors: validationErrors.length,
+      },
+    });
     res.status(400).json({
       error: 'Invalid shipment payload',
       details: validationErrors.slice(0, 25),
@@ -712,11 +1005,26 @@ app.post('/api/webhooks/shipments', webhookLimiter, asyncHandler(async (req, res
 
   try {
     const written = await writeShipmentsInBatches(valid);
+    queueAuditEvent({
+      eventType: 'webhook.ingestion.succeeded',
+      req,
+      details: { written, authMethod: authResult.method },
+    });
     res.json({ ok: true, written, authMethod: authResult.method, queuedForRetry: false });
   } catch (error) {
     if (webhookRetryEnabled) {
       try {
         await enqueueRetryPayload(valid, error.message || error, req);
+        queueAuditEvent({
+          eventType: 'webhook.ingestion.queued_for_retry',
+          severity: 'warning',
+          req,
+          details: {
+            shipments: valid.length,
+            error: String(error.message || error),
+            authMethod: authResult.method,
+          },
+        });
         res.status(202).json({
           ok: true,
           written: 0,
@@ -736,15 +1044,27 @@ app.post('/api/webhooks/shipments', webhookLimiter, asyncHandler(async (req, res
 
 app.use((err, _req, res, _next) => {
   console.error('Unhandled backend error:', err);
-  res.status(500).json({ error: 'Internal server error' });
+  if (sentryDsn) {
+    Sentry.captureException(err, {
+      tags: { service: 'shipguard-backend' },
+      extra: {
+        requestId: _req.requestId,
+        path: _req.path,
+        method: _req.method,
+      },
+    });
+  }
+  res.status(500).json({ error: 'Internal server error', requestId: _req.requestId || null });
 });
 
 process.on('unhandledRejection', (reason) => {
   console.error('Unhandled promise rejection:', reason);
+  if (sentryDsn) Sentry.captureException(reason instanceof Error ? reason : new Error(String(reason)));
 });
 
 process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
+  if (sentryDsn) Sentry.captureException(error);
 });
 
 if (db && webhookRetryEnabled) {
@@ -765,6 +1085,7 @@ if (db && retentionEnabled) {
 
 app.listen(port, () => {
   console.log(`ShipGuard backend listening on http://localhost:${port}`);
+  console.log('[Audit] Firestore audit log collection: audit_logs');
   if (!piiKey) {
     console.warn('PII encryption key not configured. customer/product values are stored as plaintext fallback.');
   }

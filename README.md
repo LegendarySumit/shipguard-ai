@@ -36,13 +36,19 @@ Whether you're tracking a single shipment or managing thousands across multiple 
 - ✅ **Intelligent Alert System** — Proactive notifications for high-risk events and delays
 - ✅ **Live Analytics Dashboard** — Trend analysis, operational metrics, and KPIs
 - ✅ **Webhook Integration** — Seamless ingestion from TMS/ERP systems with secure authentication
+- ✅ **Webhook Security Hardening** — HMAC signature verification, payload validation, and rate limiting
 - ✅ **Weather Monitoring** — Location-based weather forecasts for route planning
 - ✅ **Logistics News Feed** — Real-time industry news aggregation
+- ✅ **Route Intelligence** — Alternative route recommendations with operational risk context
 - ✅ **Firestore Real-time Sync** — Instant updates across all connected clients
 - ✅ **Multi-carrier Support** — DHL, FedEx, UPS, and custom carrier integration
 - ✅ **Custom Reporting** — Configurable views, filters, and data exports
 - ✅ **User Settings Persistence** — Firestore-backed preferences and configurations
-- ✅ **Secure API Routes** — Weather and news proxy with backend authentication
+- ✅ **Secure API Routes** — Weather, news, and route proxy endpoints with backend-only provider keys
+- ✅ **Session Protection** — Frontend session timeout controls and protected route enforcement
+- ✅ **Resilience Layer** — Frontend retry/timeout handling and offline/online status UX
+- ✅ **Observability Ready** — Optional Sentry integration for frontend and backend error monitoring
+- ✅ **CI Automation** — Frontend and backend GitHub Actions workflows
 
 ---
 
@@ -59,7 +65,12 @@ Whether you're tracking a single shipment or managing thousands across multiple 
 - **Node.js** — JavaScript runtime for server-side logic
 - **Express** — Minimal and flexible web application framework
 - **Firebase Admin SDK** — Server-side Firestore operations and authentication
-- **CORS** — Cross-origin resource sharing middleware
+- **CORS + Helmet + Morgan** — Cross-origin controls, security headers, and request logging
+- **Joi + express-rate-limit** — Payload validation and abuse protection
+
+### Monitoring & Quality
+- **Sentry** — Optional application error monitoring (frontend + backend)
+- **GitHub Actions** — Frontend build checks and backend syntax validation
 
 ### Database & Authentication
 - **Cloud Firestore** — Scalable NoSQL document database with real-time sync
@@ -85,9 +96,9 @@ shipguard-ai/
 ├── src/
 │   ├── components/               # Reusable React components
 │   ├── pages/                    # Page-level components (Dashboard, Analytics, Alerts)
-│   ├── hooks/                    # Custom React hooks
-│   ├── utils/                    # Utility functions and helpers
 │   ├── lib/                      # Firebase client & API integrations
+│   │   ├── api/                  # Backend proxy API clients + retry utility
+│   │   └── ml/                   # Risk prediction and recommendation utilities
 │   ├── App.jsx                   # Main application component
 │   └── main.jsx                  # React entry point
 ├── public/                       # Static assets
@@ -143,7 +154,7 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 
 # Backend API URL
-VITE_API_URL=http://localhost:8787
+VITE_BACKEND_URL=http://localhost:8787
 ```
 
 Create `backend/.env` file:
@@ -188,6 +199,14 @@ FIREBASE_SERVICE_ACCOUNT_PATH=backend/service-account.json
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+### Deploy Firestore Security Rules
+
+This project includes hardened rules in `firestore.rules`.
+
+```bash
+firebase deploy --only firestore:rules
 ```
 
 ### Run the Application
@@ -288,6 +307,7 @@ GET /api/health
 | `/api/weather/by-coords` | GET | Get weather by coordinates |
 | `/api/weather/geocode` | GET | Convert location to coordinates |
 | `/api/weather/forecast` | GET | Get weather forecast |
+| `/api/routes/alternatives` | POST | Get route alternatives from backend intelligence layer |
 
 **Example — Weather by City:**
 ```http
@@ -442,6 +462,11 @@ x-webhook-secret: your_webhook_secret
 | Settings Persistence | ✅ Complete |
 | Firebase Authentication | ✅ Complete |
 | Multi-carrier Support | ✅ Complete |
+| Session Timeout Controls | ✅ Complete |
+| Route Intelligence Recommendations | ✅ Complete |
+| Request Retry + Timeout Layer | ✅ Complete |
+| Frontend Error Boundary | ✅ Complete |
+| CI Workflows (Frontend + Backend) | ✅ Complete |
 
 ---
 
@@ -478,18 +503,7 @@ npm install
 1. Check Firebase security rules
 2. Verify user is authenticated
 3. Ensure service account has Firestore read/write permissions
-4. Update security rules:
-
-```javascript
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /shipments/{shipmentId} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
+4. Deploy the repository rules file: `firebase deploy --only firestore:rules`
 
 ---
 
@@ -499,7 +513,7 @@ service cloud.firestore {
 
 **Solution:**
 - Verify backend is running on port 8787
-- Check `VITE_API_URL=http://localhost:8787` in frontend `.env`
+- Check `VITE_BACKEND_URL=http://localhost:8787` in frontend `.env`
 - Verify `ALLOWED_ORIGINS` in `backend/.env` includes `http://localhost:5173`
 
 ---
@@ -564,6 +578,8 @@ service cloud.firestore {
 ## 📄 License
 
 This project is licensed under the **MIT License**.
+
+See [LICENSE](LICENSE) for full terms.
 
 ---
 

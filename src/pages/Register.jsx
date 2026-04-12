@@ -12,6 +12,9 @@ export default function Register() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+  const isStrongPassword = (value) => /^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(String(value || ''));
+
   if (currentUser) return <Navigate to="/dashboard" replace />;
 
   const updateField = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
@@ -20,7 +23,10 @@ export default function Register() {
     e.preventDefault();
     const { name, company, email, password, confirmPassword } = form;
     if (!name || !email || !password) { setError('Please fill in all required fields'); return; }
-    if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (name.trim().length < 2) { setError('Name must be at least 2 characters'); return; }
+    if (!isValidEmail(email)) { setError('Please enter a valid email address'); return; }
+    if (company && company.trim().length > 80) { setError('Company name is too long'); return; }
+    if (!isStrongPassword(password)) { setError('Password must be at least 8 chars and include letters and numbers'); return; }
     if (password !== confirmPassword) { setError('Passwords do not match'); return; }
     setError('');
     setLoading(true);

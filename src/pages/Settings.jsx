@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   User, Building2, Bell, Mail, Shield, Save,
-  Globe, Key, Monitor, Smartphone, Lock,
+  Key, Monitor, Smartphone, Lock,
   Clock3, SlidersHorizontal, ChevronRight,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 
 export default function Settings() {
   const { currentUser, userProfile, updateUserProfile } = useAuth();
+  const canEditRole = (userProfile?.role || 'analyst') === 'admin';
 
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('account');
@@ -20,9 +21,6 @@ export default function Settings() {
     emailNotif: userProfile?.notifications?.email ?? true,
     pushNotif: userProfile?.notifications?.push ?? true,
     smsNotif: userProfile?.notifications?.sms ?? false,
-    weatherApiKey: userProfile?.integrations?.weatherApiKey || '',
-    newsApiKey: userProfile?.integrations?.newsApiKey || '',
-    mapsApiKey: userProfile?.integrations?.mapsApiKey || '',
     riskThreshold: userProfile?.preferences?.riskThreshold ?? 60,
     slaWarningHours: userProfile?.preferences?.slaWarningHours ?? 48,
     digestTime: userProfile?.preferences?.digestTime || '08:00',
@@ -37,9 +35,6 @@ export default function Settings() {
       emailNotif: userProfile?.notifications?.email ?? prev.emailNotif,
       pushNotif: userProfile?.notifications?.push ?? prev.pushNotif,
       smsNotif: userProfile?.notifications?.sms ?? prev.smsNotif,
-      weatherApiKey: userProfile?.integrations?.weatherApiKey ?? prev.weatherApiKey,
-      newsApiKey: userProfile?.integrations?.newsApiKey ?? prev.newsApiKey,
-      mapsApiKey: userProfile?.integrations?.mapsApiKey ?? prev.mapsApiKey,
       riskThreshold: userProfile?.preferences?.riskThreshold ?? prev.riskThreshold,
       slaWarningHours: userProfile?.preferences?.slaWarningHours ?? prev.slaWarningHours,
       digestTime: userProfile?.preferences?.digestTime ?? prev.digestTime,
@@ -55,12 +50,6 @@ export default function Settings() {
     riskThreshold: Number(form.riskThreshold),
     slaWarningHours: Number(form.slaWarningHours),
     digestTime: form.digestTime,
-  });
-
-  const getIntegrationsPayload = () => ({
-    weatherApiKey: form.weatherApiKey.trim(),
-    newsApiKey: form.newsApiKey.trim(),
-    mapsApiKey: form.mapsApiKey.trim(),
   });
 
   const handleSaveAccount = async () => {
@@ -81,19 +70,6 @@ export default function Settings() {
       toast.success('Settings updated in Firestore');
     } catch {
       toast.error('Failed to save settings');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSaveIntegrations = async () => {
-    setLoading(true);
-    try {
-      await updateUserProfile({ integrations: getIntegrationsPayload() });
-      setLastSavedAt(new Date());
-      toast.success('API integrations saved to Firestore');
-    } catch {
-      toast.error('Failed to save API integrations');
     } finally {
       setLoading(false);
     }
@@ -228,12 +204,15 @@ export default function Settings() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-slate-700 mb-1.5">Role</label>
-                    <select value={form.role} onChange={updateField('role')} className="input-field">
+                    <select value={form.role} onChange={updateField('role')} className="input-field" disabled={!canEditRole}>
                       <option value="analyst">Analyst</option>
                       <option value="manager">Manager</option>
                       <option value="admin">Administrator</option>
                       <option value="viewer">Viewer</option>
                     </select>
+                    {!canEditRole && (
+                      <p className="text-xs text-slate-400 mt-1">Only administrators can change roles.</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -320,59 +299,15 @@ export default function Settings() {
             <div className="space-y-4">
               <div className="stat-card space-y-2">
                 <h3 className="text-lg font-semibold text-slate-800">API Integrations</h3>
-                <p className="text-sm text-slate-500">Manage keys used for real-time weather, maps, and disruption data.</p>
+                <p className="text-sm text-slate-500">All third-party provider keys are backend-managed only.</p>
               </div>
 
               <div className="stat-card space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    OpenWeatherMap API Key
-                  </label>
-                  <p className="text-xs text-slate-400 mb-2">Used for live weather data along shipment routes</p>
-                  <div className="relative">
-                    <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      value={form.weatherApiKey}
-                      onChange={updateField('weatherApiKey')}
-                      placeholder="Enter your OpenWeatherMap API key"
-                      className="input-field pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    Google Maps API Key
-                  </label>
-                  <p className="text-xs text-slate-400 mb-2">Used for route alternatives and map-based path planning</p>
-                  <div className="relative">
-                    <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      value={form.mapsApiKey}
-                      onChange={updateField('mapsApiKey')}
-                      placeholder="Enter your Google Maps API key"
-                      className="input-field pl-10"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                    News API Key
-                  </label>
-                  <p className="text-xs text-slate-400 mb-2">Used for supply chain disruption news monitoring</p>
-                  <div className="relative">
-                    <Globe className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      value={form.newsApiKey}
-                      onChange={updateField('newsApiKey')}
-                      placeholder="Enter your News API key"
-                      className="input-field pl-10"
-                    />
-                  </div>
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+                  <p className="text-sm font-semibold text-slate-700">Provider key policy</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    OpenWeather, Google Routes, and News API credentials are configured on the backend only and are never stored in the browser or user profile.
+                  </p>
                 </div>
               </div>
 
@@ -382,16 +317,10 @@ export default function Settings() {
                   <div>
                     <p className="text-sm font-medium text-amber-800">Secure Storage</p>
                     <p className="text-xs text-amber-600 mt-0.5">
-                      API fields are stored in your Firestore user profile. For production, keep provider keys on a backend and expose only scoped tokens to clients.
+                      Provider keys are backend-only. Frontend calls secure proxy endpoints through VITE_BACKEND_URL.
                     </p>
                   </div>
                 </div>
-              </div>
-
-              <div className="flex justify-center sm:justify-start">
-                <button onClick={handleSaveIntegrations} disabled={loading} className="btn-primary flex items-center gap-2 px-4 sm:px-5 py-2 sm:py-2.5 text-sm">
-                  <Save className="w-4 h-4" /> Save Integrations
-                </button>
               </div>
             </div>
           )}

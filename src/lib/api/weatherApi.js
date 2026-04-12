@@ -1,4 +1,5 @@
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
+import { fetchWithRetry } from './fetchWithRetry';
 
 function mapWeatherPayload(data) {
   return {
@@ -31,7 +32,7 @@ function mapForecastPayload(data) {
 }
 
 async function fetchJson(url, errorLabel) {
-  const res = await fetch(url);
+  const res = await fetchWithRetry(url);
   if (!res.ok) throw new Error(errorLabel);
   return res.json();
 }

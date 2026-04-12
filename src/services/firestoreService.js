@@ -3,7 +3,7 @@ import {
   query, where, orderBy, limit, onSnapshot, serverTimestamp, Timestamp,
   writeBatch
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { db, auth } from '../config/firebase';
 
 function toJsDate(value) {
   if (!value) return null;
@@ -92,6 +92,8 @@ export async function getDailyShipmentAggregates(options = {}) {
 export async function getShipments(filters = {}) {
   let q = collection(db, 'shipments');
   const constraints = [];
+  const currentUid = auth.currentUser?.uid || null;
+  if (currentUid && filters.scope !== 'all') constraints.push(where('ownerId', '==', currentUid));
   if (filters.status) constraints.push(where('status', '==', filters.status));
   if (filters.riskLevel) constraints.push(where('riskLevel', '==', filters.riskLevel));
   if (filters.carrier) constraints.push(where('carrier', '==', filters.carrier));
@@ -109,8 +111,10 @@ export async function getShipmentById(id) {
 }
 
 export async function addShipment(data) {
+  const ownerId = auth.currentUser?.uid || data.ownerId || null;
   return addDoc(collection(db, 'shipments'), {
     ...data,
+    ownerId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
@@ -130,6 +134,8 @@ export async function deleteShipment(id) {
 export function subscribeToShipments(callback, filters = {}) {
   let q = collection(db, 'shipments');
   const constraints = [];
+  const currentUid = auth.currentUser?.uid || null;
+  if (currentUid && filters.scope !== 'all') constraints.push(where('ownerId', '==', currentUid));
   if (filters.status) constraints.push(where('status', '==', filters.status));
   constraints.push(orderBy('createdAt', 'desc'));
   if (filters.limit) constraints.push(limit(filters.limit));

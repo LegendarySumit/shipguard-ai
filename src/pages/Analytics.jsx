@@ -463,6 +463,11 @@ export default function Analytics() {
                     <p className="text-sm font-medium text-slate-700 line-clamp-2">{item.title}</p>
                     <div className="flex items-center gap-3 mt-1.5">
                       <span className="text-xs text-slate-400">{item.source}</span>
+                      {item.isMock && (
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wide">
+                          Mock
+                        </span>
+                      )}
                       <span className={`badge-${item.severity === 'moderate' ? 'medium' : item.severity}`}>
                         {item.severity}
                       </span>

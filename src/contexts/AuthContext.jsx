@@ -14,6 +14,9 @@ import { auth, db, googleProvider } from '../config/firebase';
 
 const AuthContext = createContext();
 const AUTH_SESSION_FLAG = 'shipguard_session_authenticated';
+const AUTH_LAST_ACTIVITY_KEY = 'shipguard_last_activity_ms';
+const SESSION_TIMEOUT_MINUTES = Math.min(1440, Math.max(15, Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES) || 1440));
+const SESSION_TIMEOUT_MS = SESSION_TIMEOUT_MINUTES * 60 * 1000;
 const DEFAULT_NOTIFICATIONS = { email: true, push: true, sms: false };
 const DEFAULT_PREFERENCES = { riskThreshold: 60, slaWarningHours: 48, digestTime: '08:00' };
 const DEFAULT_INTEGRATIONS = { weatherApiKey: '', mapsApiKey: '', newsApiKey: '' };
@@ -28,6 +31,17 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  function markActivity() {
+    localStorage.setItem(AUTH_LAST_ACTIVITY_KEY, String(Date.now()));
+  }
+
+  function isSessionExpired() {
+    const lastActivityRaw = localStorage.getItem(AUTH_LAST_ACTIVITY_KEY);
+    const lastActivity = Number(lastActivityRaw || 0);
+    if (!lastActivity || !Number.isFinite(lastActivity)) return false;
+    return Date.now() - lastActivity > SESSION_TIMEOUT_MS;
+  }
 
   async function createUserDoc(user, extra = {}) {
     const ref = doc(db, 'users', user.uid);
@@ -63,6 +77,7 @@ export function AuthProvider({ children }) {
 
   async function signup(email, password, displayName, company) {
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
+    markActivity();
     try {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(cred.user, { displayName });
@@ -76,6 +91,7 @@ export function AuthProvider({ children }) {
 
   async function login(email, password) {
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
+    markActivity();
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       await createUserDoc(cred.user);
@@ -88,6 +104,7 @@ export function AuthProvider({ children }) {
 
   async function loginWithGoogle() {
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
+    markActivity();
     try {
       const result = await signInWithPopup(auth, googleProvider);
       await createUserDoc(result.user);
@@ -101,6 +118,7 @@ export function AuthProvider({ children }) {
   function logout() {
     setUserProfile(null);
     sessionStorage.removeItem(AUTH_SESSION_FLAG);
+    localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
     return signOut(auth);
   }
 
@@ -123,6 +141,20 @@ export function AuthProvider({ children }) {
       }
 
       unsub = onAuthStateChanged(auth, async (user) => {
+        if (user && isSessionExpired()) {
+          try {
+            await signOut(auth);
+          } catch (e) {
+            console.error('Failed to sign out expired session:', e);
+          }
+          sessionStorage.removeItem(AUTH_SESSION_FLAG);
+          localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
+          setCurrentUser(null);
+          setUserProfile(null);
+          setLoading(false);
+          return;
+        }
+
         if (user && !sessionStorage.getItem(AUTH_SESSION_FLAG)) {
           try {
             await signOut(auth);
@@ -137,6 +169,7 @@ export function AuthProvider({ children }) {
 
         setCurrentUser(user);
         if (user) {
+          markActivity();
           try {
             await createUserDoc(user);
           } catch (e) {
@@ -152,6 +185,37 @@ export function AuthProvider({ children }) {
     initializeAuth();
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    const events = ['mousemove', 'keydown', 'click', 'scroll', 'touchstart'];
+    const onActivity = () => {
+      if (currentUser) markActivity();
+    };
+
+    events.forEach((eventName) => window.addEventListener(eventName, onActivity, { passive: true }));
+    return () => {
+      events.forEach((eventName) => window.removeEventListener(eventName, onActivity));
+    };
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return undefined;
+
+    const timer = setInterval(async () => {
+      if (!isSessionExpired()) return;
+      try {
+        await signOut(auth);
+      } catch (e) {
+        console.error('Failed to auto-signout expired session:', e);
+      }
+      sessionStorage.removeItem(AUTH_SESSION_FLAG);
+      localStorage.removeItem(AUTH_LAST_ACTIVITY_KEY);
+      setCurrentUser(null);
+      setUserProfile(null);
+    }, 60 * 1000);
+
+    return () => clearInterval(timer);
+  }, [currentUser]);
 
   const value = {
     currentUser,

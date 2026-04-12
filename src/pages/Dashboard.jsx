@@ -7,7 +7,7 @@ import {
 import { PieChart, Pie, Cell, ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar } from 'recharts';
 import { motion } from 'framer-motion';
 import { getShipments, getAlerts, getRouteRecommendations, subscribeToShipments, subscribeToAlerts, subscribeToRouteRecommendations, upsertRouteRecommendationForShipment, getDailyShipmentAggregates } from '../services/firestoreService';
-import { predictDelay, getRiskColor } from '../lib/ml/delayPredictor';
+import { predictDelay } from '../lib/ml/delayPredictor';
 import { buildRouteIntelligence } from '../services/routeIntelligenceService';
 import toast from 'react-hot-toast';
 

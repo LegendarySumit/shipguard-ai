@@ -13,11 +13,15 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
   if (currentUser) return <Navigate to="/dashboard" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!email || !password) { setError('Please fill in all fields'); return; }
+    if (!isValidEmail(email)) { setError('Please enter a valid email address'); return; }
+    if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
     setError('');
     setLoading(true);
     try {
