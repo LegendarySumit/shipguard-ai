@@ -4,6 +4,7 @@ import {
   createUserWithEmailAndPassword,
   getRedirectResult,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signInWithRedirect,
   signOut,
   onAuthStateChanged,
@@ -25,6 +26,11 @@ const DEFAULT_NOTIFICATIONS = { email: true, push: true, sms: false };
 const DEFAULT_PREFERENCES = { riskThreshold: 60, slaWarningHours: 48, digestTime: '08:00' };
 const DEFAULT_INTEGRATIONS = { weatherApiKey: '', mapsApiKey: '', newsApiKey: '' };
 
+function isLikelyMobileBrowser() {
+  if (typeof navigator === 'undefined') return false;
+  return /android|iphone|ipad|ipod|mobile/i.test(String(navigator.userAgent || ''));
+}
+
 function isFirestoreOfflineError(error) {
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '').toLowerCase();
@@ -45,6 +51,19 @@ export function AuthProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [authError, setAuthError] = useState('');
+
+  function formatAuthError(error, fallback = 'Authentication failed. Please try again.') {
+    const code = String(error?.code || '').toLowerCase();
+    if (!code) return fallback;
+    if (code.includes('unauthorized-domain')) return 'Google sign-in failed: this domain is not authorized in Firebase Auth settings.';
+    if (code.includes('operation-not-allowed')) return 'Google sign-in is not enabled in Firebase Authentication providers.';
+    if (code.includes('network-request-failed')) return 'Network error while signing in. Check your internet connection and retry.';
+    if (code.includes('popup-blocked')) return 'Popup was blocked by browser. Allow popups and try again.';
+    if (code.includes('popup-closed-by-user')) return 'Sign-in popup was closed before completion. Please try again.';
+    if (code.includes('account-exists-with-different-credential')) return 'An account already exists with the same email using another sign-in method.';
+    return fallback;
+  }
 
   function markActivity() {
     localStorage.setItem(AUTH_LAST_ACTIVITY_KEY, String(Date.now()));
@@ -102,6 +121,7 @@ export function AuthProvider({ children }) {
   }
 
   async function signup(email, password, displayName, company) {
+    setAuthError('');
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
     markActivity();
     try {
@@ -110,12 +130,14 @@ export function AuthProvider({ children }) {
       await createUserDoc(cred.user, { displayName, company });
       return cred;
     } catch (e) {
+      setAuthError(formatAuthError(e, 'Failed to create account. Please try again.'));
       sessionStorage.removeItem(AUTH_SESSION_FLAG);
       throw e;
     }
   }
 
   async function login(email, password) {
+    setAuthError('');
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
     markActivity();
     try {
@@ -123,20 +145,47 @@ export function AuthProvider({ children }) {
       await createUserDoc(cred.user);
       return cred;
     } catch (e) {
+      setAuthError(formatAuthError(e, 'Failed to sign in. Please try again.'));
       sessionStorage.removeItem(AUTH_SESSION_FLAG);
       throw e;
     }
   }
 
   async function loginWithGoogle() {
+    setAuthError('');
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
     localStorage.setItem(AUTH_REDIRECT_PENDING_KEY, '1');
     localStorage.setItem(AUTH_REDIRECT_PENDING_AT_KEY, String(Date.now()));
     markActivity();
+
+    const useRedirectFlow = isLikelyMobileBrowser();
+
     try {
+      if (!useRedirectFlow) {
+        const cred = await signInWithPopup(auth, googleProvider);
+        localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+        localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
+        await createUserDoc(cred.user);
+        return { method: 'popup', user: cred.user };
+      }
+
       await signInWithRedirect(auth, googleProvider);
-      return null;
+      return { method: 'redirect' };
     } catch (e) {
+      const code = String(e?.code || '').toLowerCase();
+      const shouldFallbackToRedirect =
+        !useRedirectFlow &&
+        (code.includes('popup-blocked') ||
+          code.includes('popup-closed-by-user') ||
+          code.includes('cancelled-popup-request') ||
+          code.includes('operation-not-supported'));
+
+      if (shouldFallbackToRedirect) {
+        await signInWithRedirect(auth, googleProvider);
+        return { method: 'redirect' };
+      }
+
+      setAuthError(formatAuthError(e, 'Google sign-in failed. Please try again.'));
       sessionStorage.removeItem(AUTH_SESSION_FLAG);
       localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
       localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
@@ -175,6 +224,7 @@ export function AuthProvider({ children }) {
         // Ensure redirect result is processed before auth state decisions.
         await getRedirectResult(auth);
       } catch (e) {
+        setAuthError(formatAuthError(e, 'Google sign-in failed after redirect. Please try again.'));
         console.error('Failed to process Google redirect result:', e);
       }
 
@@ -197,6 +247,7 @@ export function AuthProvider({ children }) {
 
         setCurrentUser(user);
         if (user) {
+          setAuthError('');
           // Always trust Firebase auth state for authenticated users.
           // Session storage can be dropped across redirects in some browsers.
           sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
@@ -294,11 +345,13 @@ export function AuthProvider({ children }) {
     currentUser,
     userProfile,
     loading,
+    authError,
     signup,
     login,
     loginWithGoogle,
     logout,
     updateUserProfile: updateUserProfileData,
+    clearAuthError: () => setAuthError(''),
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

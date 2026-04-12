@@ -5,12 +5,13 @@ import { Mail, Lock, Eye, EyeOff, User, Building2, ArrowRight, AlertCircle } fro
 import toast from 'react-hot-toast';
 
 export default function Register() {
-  const { signup, loginWithGoogle, currentUser } = useAuth();
+  const { signup, loginWithGoogle, currentUser, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
   const [form, setForm] = useState({ name: '', company: '', email: '', password: '', confirmPassword: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const visibleError = error || authError;
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
   const isStrongPassword = (value) => /^(?=.*[A-Za-z])(?=.*\d).{8,}$/.test(String(value || ''));
@@ -21,6 +22,7 @@ export default function Register() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    clearAuthError();
     const { name, company, email, password, confirmPassword } = form;
     if (!name || !email || !password) { setError('Please fill in all required fields'); return; }
     if (name.trim().length < 2) { setError('Name must be at least 2 characters'); return; }
@@ -45,13 +47,23 @@ export default function Register() {
   };
 
   const handleGoogleSignup = async () => {
+    clearAuthError();
     setError('');
     setLoading(true);
     try {
-      await loginWithGoogle();
-      toast.success('Redirecting to Google sign-up...');
+      const result = await loginWithGoogle();
+      if (result?.method === 'popup') {
+        toast.success('Signed in successfully!');
+        navigate('/dashboard');
+      } else {
+        toast.success('Redirecting to Google sign-up...');
+      }
     } catch (err) {
-      setError('Google sign-up failed.');
+      const code = String(err?.code || '').toLowerCase();
+      const message = code.includes('popup-blocked')
+        ? 'Popup was blocked by browser. Please allow popups and try again.'
+        : 'Google sign-up failed.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -77,10 +89,10 @@ export default function Register() {
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Create Account</h2>
             <p className="mt-2 text-slate-500">Start monitoring shipment risk with AI predictions.</p>
 
-            {error && (
+            {visibleError && (
               <div className="flex items-center gap-2 p-3 mt-6 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {error}
+                {visibleError}
               </div>
             )}
 

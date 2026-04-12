@@ -5,13 +5,14 @@ import { Mail, Lock, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function Login() {
-  const { login, loginWithGoogle, currentUser } = useAuth();
+  const { login, loginWithGoogle, currentUser, authError, clearAuthError } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const visibleError = error || authError;
 
   const isValidEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
@@ -19,6 +20,7 @@ export default function Login() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    clearAuthError();
     if (!email || !password) { setError('Please fill in all fields'); return; }
     if (!isValidEmail(email)) { setError('Please enter a valid email address'); return; }
     if (password.length < 8) { setError('Password must be at least 8 characters'); return; }
@@ -40,13 +42,23 @@ export default function Login() {
   };
 
   const handleGoogleLogin = async () => {
+    clearAuthError();
     setError('');
     setLoading(true);
     try {
-      await loginWithGoogle();
-      toast.success('Redirecting to Google sign-in...');
+      const result = await loginWithGoogle();
+      if (result?.method === 'popup') {
+        toast.success('Signed in successfully!');
+        navigate('/dashboard');
+      } else {
+        toast.success('Redirecting to Google sign-in...');
+      }
     } catch (err) {
-      setError('Google sign-in failed. Please try again.');
+      const code = String(err?.code || '').toLowerCase();
+      const message = code.includes('popup-blocked')
+        ? 'Popup was blocked by browser. Please allow popups and try again.'
+        : 'Google sign-in failed. Please try again.';
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -72,10 +84,10 @@ export default function Login() {
             <h2 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">Sign In</h2>
             <p className="mt-2 text-slate-500">Access your shipment intelligence workspace.</p>
 
-            {error && (
+            {visibleError && (
               <div className="flex items-center gap-2 p-3 mt-6 bg-red-50 border border-red-200 rounded-xl text-sm text-red-600">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
-                {error}
+                {visibleError}
               </div>
             )}
 
