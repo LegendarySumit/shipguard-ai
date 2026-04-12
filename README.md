@@ -220,24 +220,36 @@ Navigate to `/analytics` for:
 
 ### Webhook Testing
 
-Send a test shipment via webhook:
+Preferred secure test (HMAC signed webhook):
 
 ```bash
-curl -X POST http://localhost:8787/api/webhooks/shipments \
-  -H "Content-Type: application/json" \
-  -H "x-webhook-secret: YOUR_WEBHOOK_SECRET" \
-  -d '{
-    "shipment": {
-      "trackingId": "TEST-1001",
-      "status": "in_transit",
-      "origin": "Berlin, DE",
-      "destination": "Munich, DE",
-      "riskScore": 25
-    }
-  }'
+cd backend
+WEBHOOK_SECRET=YOUR_SECRET_AT_LEAST_32_CHARS \
+WEBHOOK_URL=http://localhost:8787/api/webhooks/shipments \
+npm run send:webhook:signed
 ```
 
 Verify the shipment appears in Firestore and updates the dashboard in real-time.
+
+Run full auth behavior smoke test:
+
+```bash
+cd backend
+WEBHOOK_SECRET=YOUR_SECRET_AT_LEAST_32_CHARS \
+WEBHOOK_URL=http://localhost:8787/api/webhooks/shipments \
+EXPECT_STRICT_MODE=false \
+npm run test:webhook-hmac
+```
+
+After switching to strict mode (`WEBHOOK_REQUIRE_HMAC=true` and `WEBHOOK_ALLOW_LEGACY_SECRET=false`), run:
+
+```bash
+cd backend
+WEBHOOK_SECRET=YOUR_SECRET_AT_LEAST_32_CHARS \
+WEBHOOK_URL=http://localhost:8787/api/webhooks/shipments \
+EXPECT_STRICT_MODE=true \
+npm run test:webhook-hmac
+```
 
 ---
 
@@ -326,6 +338,12 @@ POST /api/webhooks/shipments
 **Headers:**
 ```
 Content-Type: application/json
+X-Webhook-Timestamp: <unix-seconds>
+X-Webhook-Signature: sha256=<hmac_sha256(secret, timestamp.rawBody)>
+```
+
+Migration compatibility (temporary):
+```
 x-webhook-secret: your_webhook_secret
 ```
 

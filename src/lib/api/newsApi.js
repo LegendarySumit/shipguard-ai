@@ -1,4 +1,3 @@
-const API_KEY = import.meta.env.VITE_NEWS_API_KEY;
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
 
 function mapNewsItems(articles = []) {
@@ -20,22 +19,11 @@ export async function getLogisticsNews() {
       const data = await res.json();
       return mapNewsItems(data.articles || []);
     } catch (e) {
-      console.warn('Backend News API failed, trying direct client API:', e.message);
+      console.warn('Backend News API failed, using mock logistics news:', e.message);
     }
   }
 
-  if (!API_KEY) return getMockNews();
-  try {
-    const res = await fetch(
-      `https://newsapi.org/v2/everything?q=shipping+delay+OR+port+congestion+OR+supply+chain+disruption&sortBy=publishedAt&pageSize=10&apiKey=${API_KEY}`
-    );
-    if (!res.ok) throw new Error('News API error');
-    const data = await res.json();
-    return mapNewsItems(data.articles || []);
-  } catch (e) {
-    console.warn('News API failed, returning no live news:', e.message);
-    return [];
-  }
+  return getMockNews();
 }
 
 function classifyNewsSeverity(text) {

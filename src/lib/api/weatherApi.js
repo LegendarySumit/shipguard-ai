@@ -1,7 +1,4 @@
-const API_KEY = import.meta.env.VITE_OPENWEATHER_API_KEY;
 const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || '').replace(/\/$/, '');
-const BASE_URL = 'https://api.openweathermap.org/data/2.5';
-const GEO_URL = 'https://api.openweathermap.org/geo/1.0/direct';
 
 function mapWeatherPayload(data) {
   return {
@@ -48,21 +45,11 @@ export async function getWeatherByCity(city) {
       );
       return mapWeatherPayload(data);
     } catch (e) {
-      console.warn('Backend weather API failed, trying direct weather API:', e.message);
+      console.warn('Backend weather API failed, using mock weather:', e.message);
     }
   }
 
-  if (!API_KEY) return getMockWeather(city);
-  try {
-    const data = await fetchJson(
-      `${BASE_URL}/weather?q=${encodeURIComponent(city)}&appid=${API_KEY}&units=metric`,
-      'Weather API error'
-    );
-    return mapWeatherPayload(data);
-  } catch (e) {
-    console.warn('Weather API failed, using mock data:', e.message);
-    return getMockWeather(city);
-  }
+  return getMockWeather(city);
 }
 
 export async function getWeatherByCoords(lat, lon) {
@@ -74,20 +61,11 @@ export async function getWeatherByCoords(lat, lon) {
       );
       return mapWeatherPayload(data);
     } catch (e) {
-      console.warn('Backend weather-by-coords failed, trying direct weather API:', e.message);
+      console.warn('Backend weather-by-coords failed, using mock weather:', e.message);
     }
   }
 
-  if (!API_KEY) return getMockWeather('Unknown');
-  try {
-    const data = await fetchJson(
-      `${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`,
-      'Weather API error'
-    );
-    return mapWeatherPayload(data);
-  } catch {
-    return getMockWeather('Unknown');
-  }
+  return getMockWeather('Unknown');
 }
 
 export async function geocodeCity(city) {
@@ -108,28 +86,11 @@ export async function geocodeCity(city) {
         lon: match.lon,
       };
     } catch (e) {
-      console.warn('Backend geocoding failed, trying direct geocoding API:', e.message);
+      console.warn('Backend geocoding failed:', e.message);
     }
   }
 
-  if (!API_KEY) return null;
-  try {
-    const data = await fetchJson(
-      `${GEO_URL}?q=${encodeURIComponent(city)}&limit=1&appid=${API_KEY}`,
-      'Geocoding API error'
-    );
-    const match = data?.[0];
-    if (!match) return null;
-    return {
-      name: match.name,
-      country: match.country,
-      lat: match.lat,
-      lon: match.lon,
-    };
-  } catch (e) {
-    console.warn('Geocoding failed:', e.message);
-    return null;
-  }
+  return null;
 }
 
 export async function getForecastByCoords(lat, lon) {
@@ -141,21 +102,11 @@ export async function getForecastByCoords(lat, lon) {
       );
       return mapForecastPayload(data);
     } catch (e) {
-      console.warn('Backend forecast API failed, trying direct forecast API:', e.message);
+      console.warn('Backend forecast API failed, using mock forecast:', e.message);
     }
   }
 
-  if (!API_KEY) return getMockForecast();
-  try {
-    const data = await fetchJson(
-      `${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`,
-      'Forecast API error'
-    );
-    return mapForecastPayload(data);
-  } catch (e) {
-    console.warn('Forecast API failed, using mock forecast:', e.message);
-    return getMockForecast();
-  }
+  return getMockForecast();
 }
 
 function getMockWeather(city) {

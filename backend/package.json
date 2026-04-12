@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test:webhook-hmac": "node scripts/webhook-hmac-smoketest.mjs",
+    "send:webhook:signed": "node scripts/send-signed-webhook.mjs"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
     "firebase-admin": "^13.4.0"
   }
 }
