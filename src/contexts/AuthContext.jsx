@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect } from 'react';
 import {
   browserSessionPersistence,
   createUserWithEmailAndPassword,
+  getRedirectResult,
   signInWithEmailAndPassword,
   signInWithRedirect,
   signOut,
@@ -16,6 +17,8 @@ const AuthContext = createContext();
 const AUTH_SESSION_FLAG = 'shipguard_session_authenticated';
 const AUTH_LAST_ACTIVITY_KEY = 'shipguard_last_activity_ms';
 const AUTH_REDIRECT_PENDING_KEY = 'shipguard_google_redirect_pending';
+const AUTH_REDIRECT_PENDING_AT_KEY = 'shipguard_google_redirect_pending_at';
+const REDIRECT_PENDING_MAX_AGE_MS = 15 * 60 * 1000;
 const SESSION_TIMEOUT_MINUTES = Math.min(1440, Math.max(15, Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES) || 1440));
 const SESSION_TIMEOUT_MS = SESSION_TIMEOUT_MINUTES * 60 * 1000;
 const DEFAULT_NOTIFICATIONS = { email: true, push: true, sms: false };
@@ -52,6 +55,18 @@ export function AuthProvider({ children }) {
     const lastActivity = Number(lastActivityRaw || 0);
     if (!lastActivity || !Number.isFinite(lastActivity)) return false;
     return Date.now() - lastActivity > SESSION_TIMEOUT_MS;
+  }
+
+  function isRedirectPending() {
+    if (localStorage.getItem(AUTH_REDIRECT_PENDING_KEY) !== '1') return false;
+    const pendingAt = Number(localStorage.getItem(AUTH_REDIRECT_PENDING_AT_KEY) || 0);
+    if (!Number.isFinite(pendingAt) || pendingAt <= 0) return false;
+    const fresh = Date.now() - pendingAt <= REDIRECT_PENDING_MAX_AGE_MS;
+    if (!fresh) {
+      localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+      localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
+    }
+    return fresh;
   }
 
   async function createUserDoc(user, extra = {}) {
@@ -116,6 +131,7 @@ export function AuthProvider({ children }) {
   async function loginWithGoogle() {
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
     localStorage.setItem(AUTH_REDIRECT_PENDING_KEY, '1');
+    localStorage.setItem(AUTH_REDIRECT_PENDING_AT_KEY, String(Date.now()));
     markActivity();
     try {
       await signInWithRedirect(auth, googleProvider);
@@ -123,6 +139,7 @@ export function AuthProvider({ children }) {
     } catch (e) {
       sessionStorage.removeItem(AUTH_SESSION_FLAG);
       localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+      localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
       throw e;
     }
   }
@@ -152,8 +169,15 @@ export function AuthProvider({ children }) {
         console.error('Failed to set auth persistence:', e);
       }
 
+      try {
+        // Ensure redirect result is processed before auth state decisions.
+        await getRedirectResult(auth);
+      } catch (e) {
+        console.error('Failed to process Google redirect result:', e);
+      }
+
       unsub = onAuthStateChanged(auth, async (user) => {
-        const redirectPending = localStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === '1';
+        const redirectPending = isRedirectPending();
 
         if (user && isSessionExpired()) {
           try {
@@ -191,6 +215,7 @@ export function AuthProvider({ children }) {
         if (user) {
           if (redirectPending) {
             localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+            localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
           }
           markActivity();
           try {
@@ -216,7 +241,10 @@ export function AuthProvider({ children }) {
             }
           }
         } else {
-          localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+          if (!redirectPending) {
+            localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+            localStorage.removeItem(AUTH_REDIRECT_PENDING_AT_KEY);
+          }
           setUserProfile(null);
         }
         setLoading(false);
