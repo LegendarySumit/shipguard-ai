@@ -860,6 +860,15 @@ async function getOsrmRoutes(origin, destination) {
 
   const upstream = await fetch(`${OSRM_BASE_URL}/route/v1/driving/${coordinates}?${params.toString()}`);
   const data = await upstream.json();
+
+  const osrmCode = String(data?.code || '').toLowerCase();
+  const osrmMessage = String(data?.message || '').toLowerCase();
+  const isImpossibleRoute = osrmCode === 'noroute' || osrmMessage.includes('impossible route');
+
+  if (isImpossibleRoute) {
+    return [];
+  }
+
   if (!upstream.ok) {
     throw new Error(data?.message || 'OSRM route request failed');
   }
@@ -905,7 +914,13 @@ app.post('/api/routes/alternatives', asyncHandler(async (req, res) => {
     { lat: destinationLat, lon: destinationLon }
   );
   if (!routes.length) {
-    res.status(503).json({ error: 'OSRM did not return any alternative routes' });
+    res.status(200).json({
+      source: 'osrm',
+      requestedMode,
+      routingMode,
+      routes: [],
+      warning: 'No drivable route found between origin and destination',
+    });
     return;
   }
 
