@@ -5,9 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "start": "node server.js",
-    "test:webhook-hmac": "node scripts/webhook-hmac-smoketest.mjs",
-    "send:webhook:signed": "node scripts/send-signed-webhook.mjs"
+    "start": "node server.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

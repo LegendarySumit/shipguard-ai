@@ -60,6 +60,14 @@ const webhookAllowLegacySecret = String(env.WEBHOOK_ALLOW_LEGACY_SECRET || 'true
 const webhookTimestampToleranceSec = Math.max(30, Number(env.WEBHOOK_TIMESTAMP_TOLERANCE_SEC) || 300);
 const apiRateLimitPerMinute = Math.max(30, Number(env.API_RATE_LIMIT_PER_MINUTE) || 300);
 const webhookRateLimitPerMinute = Math.max(10, Number(env.WEBHOOK_RATE_LIMIT_PER_MINUTE) || 120);
+const retentionEnabled = String(env.RETENTION_ENABLED || 'true').toLowerCase() === 'true';
+const retentionDays = Math.max(30, Number(env.RETENTION_DAYS) || 365);
+const retentionRunEveryHours = Math.max(1, Number(env.RETENTION_RUN_EVERY_HOURS) || 24);
+const piiEncryptionKey = String(env.PII_ENCRYPTION_KEY || '').trim();
+const webhookRetryEnabled = String(env.WEBHOOK_RETRY_ENABLED || 'true').toLowerCase() === 'true';
+const webhookRetryIntervalSec = Math.max(15, Number(env.WEBHOOK_RETRY_INTERVAL_SEC) || 60);
+const webhookRetryMaxAttempts = Math.max(1, Number(env.WEBHOOK_RETRY_MAX_ATTEMPTS) || 6);
+const webhookRetryBatchSize = Math.max(1, Math.min(200, Number(env.WEBHOOK_RETRY_BATCH_SIZE) || 25));
 
 const asyncHandler = (handler) => (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
 
@@ -98,6 +106,40 @@ app.use('/api', apiLimiter);
 
 function sanitizeNewsQuery(query) {
   return String(query || 'shipping delay OR port congestion OR supply chain disruption').trim();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function deriveEncryptionKey() {
+  if (!piiEncryptionKey) return null;
+
+  if (/^[A-Za-z0-9+/=]+$/.test(piiEncryptionKey)) {
+    try {
+      const decoded = Buffer.from(piiEncryptionKey, 'base64');
+      if (decoded.length === 32) return decoded;
+    } catch {
+      // fall through to hash-based derivation
+    }
+  }
+
+  return crypto.createHash('sha256').update(piiEncryptionKey, 'utf8').digest();
+}
+
+const piiKey = deriveEncryptionKey();
+
+function encryptPiiValue(value) {
+  if (!piiKey) return null;
+  const plain = String(value || '').trim();
+  if (!plain) return null;
+
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', piiKey, iv);
+  const encrypted = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  const payload = Buffer.concat([iv, tag, encrypted]).toString('base64');
+  return payload;
 }
 
 function timingSafeEqualString(a, b) {
@@ -226,6 +268,9 @@ function authorizeWebhookRequest(req, secret) {
 }
 
 function normalizeShipment(input) {
+  const customerEncrypted = encryptPiiValue(input.customer);
+  const productEncrypted = encryptPiiValue(input.product);
+
   return {
     trackingId: String(input.trackingId || '').trim(),
     status: input.status || 'in_transit',
@@ -245,12 +290,183 @@ function normalizeShipment(input) {
     traffic: input.traffic || null,
     port: input.port || null,
     route: input.route || null,
-    product: input.product || 'Unspecified goods',
-    customer: input.customer || 'Unknown customer',
+    product: productEncrypted ? '[ENCRYPTED]' : (input.product || 'Unspecified goods'),
+    customer: customerEncrypted ? '[ENCRYPTED]' : (input.customer || 'Unknown customer'),
+    productEncrypted,
+    customerEncrypted,
+    piiEncrypted: Boolean(productEncrypted || customerEncrypted),
     items: Number.isFinite(Number(input.items)) ? Number(input.items) : 0,
     weight: Number.isFinite(Number(input.weight)) ? Number(input.weight) : 0,
     source: input.source || 'webhook',
   };
+}
+
+async function writeShipmentsInBatches(validShipments) {
+  const now = admin.firestore.FieldValue.serverTimestamp();
+  let written = 0;
+
+  for (let i = 0; i < validShipments.length; i += 400) {
+    const chunk = validShipments.slice(i, i + 400);
+    const batch = db.batch();
+    chunk.forEach((shipment) => {
+      const ref = db.collection('shipments').doc(shipment.trackingId);
+      batch.set(ref, {
+        ...shipment,
+        updatedAt: now,
+        createdAt: now,
+      }, { merge: true });
+    });
+
+    let lastError = null;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        await batch.commit();
+        written += chunk.length;
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        const backoffMs = Math.min(250 * (2 ** attempt) + Math.round(Math.random() * 100), 2500);
+        await sleep(backoffMs);
+      }
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+  }
+
+  return written;
+}
+
+function nextRetryTimestamp(attempts) {
+  const backoffSeconds = Math.min(60 * (2 ** Math.max(0, attempts - 1)), 3600);
+  const jitterSeconds = Math.floor(Math.random() * 15);
+  return admin.firestore.Timestamp.fromDate(new Date(Date.now() + (backoffSeconds + jitterSeconds) * 1000));
+}
+
+async function enqueueRetryPayload(validShipments, errorMessage, req) {
+  const queueDoc = {
+    status: 'pending',
+    attempts: 0,
+    maxAttempts: webhookRetryMaxAttempts,
+    lastError: String(errorMessage || 'Unknown webhook processing error').slice(0, 500),
+    nextAttemptAt: admin.firestore.Timestamp.now(),
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    payload: {
+      shipments: validShipments,
+    },
+    requestMeta: {
+      ip: req.ip || null,
+      userAgent: req.headers['user-agent'] || null,
+      webhookTimestamp: req.headers['x-webhook-timestamp'] || null,
+      signaturePresent: Boolean(req.headers['x-webhook-signature']),
+    },
+  };
+
+  await db.collection('webhook_retry_queue').add(queueDoc);
+}
+
+async function processWebhookRetryQueue() {
+  if (!db || !webhookRetryEnabled) return;
+
+  const nowTs = admin.firestore.Timestamp.now();
+  const snap = await db
+    .collection('webhook_retry_queue')
+    .where('status', '==', 'pending')
+    .limit(webhookRetryBatchSize)
+    .get();
+
+  if (snap.empty) return;
+
+  for (const docSnap of snap.docs) {
+    const item = docSnap.data();
+    const nextAttemptAt = item.nextAttemptAt;
+    if (nextAttemptAt && typeof nextAttemptAt.toMillis === 'function' && nextAttemptAt.toMillis() > nowTs.toMillis()) {
+      continue;
+    }
+
+    const attempts = Number(item.attempts || 0);
+    if (attempts >= webhookRetryMaxAttempts) {
+      await docSnap.ref.set({
+        status: 'failed',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      continue;
+    }
+
+    const shipments = Array.isArray(item?.payload?.shipments) ? item.payload.shipments : [];
+    if (shipments.length === 0) {
+      await docSnap.ref.set({
+        status: 'failed',
+        lastError: 'Retry payload is empty',
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+      continue;
+    }
+
+    try {
+      await writeShipmentsInBatches(shipments);
+      await docSnap.ref.set({
+        status: 'completed',
+        processedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    } catch (error) {
+      const nextAttempts = attempts + 1;
+      await docSnap.ref.set({
+        attempts: nextAttempts,
+        status: nextAttempts >= webhookRetryMaxAttempts ? 'failed' : 'pending',
+        nextAttemptAt: nextRetryTimestamp(nextAttempts),
+        lastError: String(error.message || error).slice(0, 500),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+  }
+}
+
+async function purgeOldCollectionDocs(collectionName, dateField, cutoffTs, batchSize = 400) {
+  if (!db) return 0;
+
+  let deleted = 0;
+  while (true) {
+    const snap = await db
+      .collection(collectionName)
+      .where(dateField, '<', cutoffTs)
+      .limit(batchSize)
+      .get();
+
+    if (snap.empty) break;
+
+    const batch = db.batch();
+    snap.docs.forEach((docSnap) => batch.delete(docSnap.ref));
+    await batch.commit();
+    deleted += snap.size;
+  }
+
+  return deleted;
+}
+
+async function runRetentionCleanup() {
+  if (!db || !retentionEnabled) return;
+
+  const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+  const cutoffTs = admin.firestore.Timestamp.fromDate(cutoffDate);
+
+  try {
+    const shipmentsDeleted = await purgeOldCollectionDocs('shipments', 'updatedAt', cutoffTs);
+    const alertsDeleted = await purgeOldCollectionDocs('alerts', 'createdAt', cutoffTs);
+    const queueDeleted = await purgeOldCollectionDocs('webhook_retry_queue', 'updatedAt', cutoffTs);
+
+    if (shipmentsDeleted || alertsDeleted || queueDeleted) {
+      console.log(
+        `[Retention] Deleted shipments=${shipmentsDeleted}, alerts=${alertsDeleted}, retryQueue=${queueDeleted}`
+      );
+    }
+  } catch (error) {
+    console.error('[Retention] Cleanup failed:', error.message);
+  }
 }
 
 function getServiceAccount() {
@@ -314,6 +530,9 @@ app.get('/api/health', (_req, res) => {
       openWeather: Boolean(OPENWEATHER_KEY),
       newsApi: Boolean(NEWS_KEY),
       firestoreIngestion: Boolean(db),
+      piiEncryption: Boolean(piiKey),
+      webhookRetry: Boolean(db && webhookRetryEnabled),
+      retentionPolicy: Boolean(db && retentionEnabled),
     },
   });
 });
@@ -491,25 +710,28 @@ app.post('/api/webhooks/shipments', webhookLimiter, asyncHandler(async (req, res
     return;
   }
 
-  const now = admin.firestore.FieldValue.serverTimestamp();
-  let written = 0;
+  try {
+    const written = await writeShipmentsInBatches(valid);
+    res.json({ ok: true, written, authMethod: authResult.method, queuedForRetry: false });
+  } catch (error) {
+    if (webhookRetryEnabled) {
+      try {
+        await enqueueRetryPayload(valid, error.message || error, req);
+        res.status(202).json({
+          ok: true,
+          written: 0,
+          authMethod: authResult.method,
+          queuedForRetry: true,
+          warning: 'Ingestion is queued for retry due to transient failure',
+        });
+        return;
+      } catch (queueError) {
+        console.error('Failed to enqueue webhook retry payload:', queueError.message);
+      }
+    }
 
-  for (let i = 0; i < valid.length; i += 400) {
-    const chunk = valid.slice(i, i + 400);
-    const batch = db.batch();
-    chunk.forEach((shipment) => {
-      const ref = db.collection('shipments').doc(shipment.trackingId);
-      batch.set(ref, {
-        ...shipment,
-        updatedAt: now,
-        createdAt: now,
-      }, { merge: true });
-    });
-    await batch.commit();
-    written += chunk.length;
+    throw error;
   }
-
-  res.json({ ok: true, written, authMethod: authResult.method });
 }));
 
 app.use((err, _req, res, _next) => {
@@ -525,6 +747,25 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught exception:', error);
 });
 
+if (db && webhookRetryEnabled) {
+  setInterval(() => {
+    processWebhookRetryQueue().catch((error) => {
+      console.error('[WebhookRetry] Processing failed:', error.message);
+    });
+  }, webhookRetryIntervalSec * 1000);
+}
+
+if (db && retentionEnabled) {
+  setInterval(() => {
+    runRetentionCleanup().catch((error) => {
+      console.error('[Retention] Scheduled cleanup failed:', error.message);
+    });
+  }, retentionRunEveryHours * 60 * 60 * 1000);
+}
+
 app.listen(port, () => {
   console.log(`ShipGuard backend listening on http://localhost:${port}`);
+  if (!piiKey) {
+    console.warn('PII encryption key not configured. customer/product values are stored as plaintext fallback.');
+  }
 });

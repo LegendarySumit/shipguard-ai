@@ -157,10 +157,26 @@ ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
 # Webhook Security
 WEBHOOK_SECRET=your_secure_webhook_secret_min_32_chars
 WEBHOOK_URL=http://localhost:8787
+WEBHOOK_REQUIRE_HMAC=true
+WEBHOOK_ALLOW_LEGACY_SECRET=false
 
 # External APIs
 OPENWEATHER_API_KEY=your_openweather_api_key
 NEWS_API_KEY=your_news_api_key
+
+# PII encryption (required for encrypted storage of customer/product fields)
+PII_ENCRYPTION_KEY=replace_with_strong_random_secret
+
+# Webhook retry queue (prevents data loss on transient failures)
+WEBHOOK_RETRY_ENABLED=true
+WEBHOOK_RETRY_INTERVAL_SEC=60
+WEBHOOK_RETRY_MAX_ATTEMPTS=6
+WEBHOOK_RETRY_BATCH_SIZE=25
+
+# Firestore retention policy
+RETENTION_ENABLED=true
+RETENTION_DAYS=365
+RETENTION_RUN_EVERY_HOURS=24
 
 # Firebase Admin (choose one method)
 FIREBASE_SERVICE_ACCOUNT_PATH=backend/service-account.json
@@ -220,36 +236,24 @@ Navigate to `/analytics` for:
 
 ### Webhook Testing
 
-Preferred secure test (HMAC signed webhook):
+Send a test shipment via webhook:
 
 ```bash
-cd backend
-WEBHOOK_SECRET=YOUR_SECRET_AT_LEAST_32_CHARS \
-WEBHOOK_URL=http://localhost:8787/api/webhooks/shipments \
-npm run send:webhook:signed
+curl -X POST http://localhost:8787/api/webhooks/shipments \
+  -H "Content-Type: application/json" \
+  -H "x-webhook-secret: YOUR_WEBHOOK_SECRET" \
+  -d '{
+    "shipment": {
+      "trackingId": "TEST-1001",
+      "status": "in_transit",
+      "origin": "Berlin, DE",
+      "destination": "Munich, DE",
+      "riskScore": 25
+    }
+  }'
 ```
 
 Verify the shipment appears in Firestore and updates the dashboard in real-time.
-
-Run full auth behavior smoke test:
-
-```bash
-cd backend
-WEBHOOK_SECRET=YOUR_SECRET_AT_LEAST_32_CHARS \
-WEBHOOK_URL=http://localhost:8787/api/webhooks/shipments \
-EXPECT_STRICT_MODE=false \
-npm run test:webhook-hmac
-```
-
-After switching to strict mode (`WEBHOOK_REQUIRE_HMAC=true` and `WEBHOOK_ALLOW_LEGACY_SECRET=false`), run:
-
-```bash
-cd backend
-WEBHOOK_SECRET=YOUR_SECRET_AT_LEAST_32_CHARS \
-WEBHOOK_URL=http://localhost:8787/api/webhooks/shipments \
-EXPECT_STRICT_MODE=true \
-npm run test:webhook-hmac
-```
 
 ---
 
