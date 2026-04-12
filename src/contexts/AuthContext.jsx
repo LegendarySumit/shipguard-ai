@@ -15,6 +15,7 @@ import { auth, db, googleProvider } from '../config/firebase';
 const AuthContext = createContext();
 const AUTH_SESSION_FLAG = 'shipguard_session_authenticated';
 const AUTH_LAST_ACTIVITY_KEY = 'shipguard_last_activity_ms';
+const AUTH_REDIRECT_PENDING_KEY = 'shipguard_google_redirect_pending';
 const SESSION_TIMEOUT_MINUTES = Math.min(1440, Math.max(15, Number(import.meta.env.VITE_SESSION_TIMEOUT_MINUTES) || 1440));
 const SESSION_TIMEOUT_MS = SESSION_TIMEOUT_MINUTES * 60 * 1000;
 const DEFAULT_NOTIFICATIONS = { email: true, push: true, sms: false };
@@ -114,12 +115,14 @@ export function AuthProvider({ children }) {
 
   async function loginWithGoogle() {
     sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
+    localStorage.setItem(AUTH_REDIRECT_PENDING_KEY, '1');
     markActivity();
     try {
       await signInWithRedirect(auth, googleProvider);
       return null;
     } catch (e) {
       sessionStorage.removeItem(AUTH_SESSION_FLAG);
+      localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
       throw e;
     }
   }
@@ -150,6 +153,8 @@ export function AuthProvider({ children }) {
       }
 
       unsub = onAuthStateChanged(auth, async (user) => {
+        const redirectPending = localStorage.getItem(AUTH_REDIRECT_PENDING_KEY) === '1';
+
         if (user && isSessionExpired()) {
           try {
             await signOut(auth);
@@ -162,6 +167,12 @@ export function AuthProvider({ children }) {
           setUserProfile(null);
           setLoading(false);
           return;
+        }
+
+        if (user && !sessionStorage.getItem(AUTH_SESSION_FLAG) && redirectPending) {
+          // Some browsers/devices can lose sessionStorage across OAuth redirect.
+          // Recover once and continue authenticated session.
+          sessionStorage.setItem(AUTH_SESSION_FLAG, '1');
         }
 
         if (user && !sessionStorage.getItem(AUTH_SESSION_FLAG)) {
@@ -178,6 +189,9 @@ export function AuthProvider({ children }) {
 
         setCurrentUser(user);
         if (user) {
+          if (redirectPending) {
+            localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
+          }
           markActivity();
           try {
             await createUserDoc(user);
@@ -202,6 +216,7 @@ export function AuthProvider({ children }) {
             }
           }
         } else {
+          localStorage.removeItem(AUTH_REDIRECT_PENDING_KEY);
           setUserProfile(null);
         }
         setLoading(false);
