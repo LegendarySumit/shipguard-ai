@@ -134,8 +134,11 @@ export default function Shipments() {
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 w-full sm:w-auto">
           <div className="relative flex-1 sm:w-72">
+            <label htmlFor="shipments-search" className="sr-only">Search shipments</label>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
+              id="shipments-search"
+              name="shipmentsSearch"
               type="text"
               placeholder="Search shipments..."
               value={search}
@@ -166,8 +169,8 @@ export default function Shipments() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 bg-white rounded-2xl border border-slate-200 shadow-sm">
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Risk Level</label>
-                <select value={filterRisk} onChange={e => setFilterRisk(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="shipments-filter-risk" className="block text-xs font-medium text-slate-500 mb-1.5">Risk Level</label>
+                <select id="shipments-filter-risk" name="filterRisk" value={filterRisk} onChange={e => setFilterRisk(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All Risks</option>
                   <option value="critical">Critical</option>
                   <option value="high">High</option>
@@ -176,8 +179,8 @@ export default function Shipments() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="shipments-filter-status" className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
+                <select id="shipments-filter-status" name="filterStatus" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All Statuses</option>
                   <option value="in_transit">In Transit</option>
                   <option value="at_port">At Port</option>
@@ -188,8 +191,8 @@ export default function Shipments() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Mode</label>
-                <select value={filterMode} onChange={e => setFilterMode(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="shipments-filter-mode" className="block text-xs font-medium text-slate-500 mb-1.5">Mode</label>
+                <select id="shipments-filter-mode" name="filterMode" value={filterMode} onChange={e => setFilterMode(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All Modes</option>
                   <option value="air">Air</option>
                   <option value="sea">Sea</option>
@@ -199,8 +202,8 @@ export default function Shipments() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Carrier</label>
-                <select value={filterCarrier} onChange={e => setFilterCarrier(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="shipments-filter-carrier" className="block text-xs font-medium text-slate-500 mb-1.5">Carrier</label>
+                <select id="shipments-filter-carrier" name="filterCarrier" value={filterCarrier} onChange={e => setFilterCarrier(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All Carriers</option>
                   {carriers.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>

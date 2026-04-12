@@ -168,8 +168,11 @@ export default function Alerts() {
       {/* Search & Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
+          <label htmlFor="alerts-search" className="sr-only">Search alerts</label>
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
+            id="alerts-search"
+            name="alertsSearch"
             type="text"
             placeholder="Search alerts..."
             value={search}
@@ -196,8 +199,8 @@ export default function Alerts() {
           >
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4 p-3 sm:p-4 bg-white rounded-2xl border border-slate-200">
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Severity</label>
-                <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="alerts-filter-severity" className="block text-xs font-medium text-slate-500 mb-1.5">Severity</label>
+                <select id="alerts-filter-severity" name="filterSeverity" value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All</option>
                   <option value="critical">Critical</option>
                   <option value="high">High</option>
@@ -206,8 +209,8 @@ export default function Alerts() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
-                <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="alerts-filter-status" className="block text-xs font-medium text-slate-500 mb-1.5">Status</label>
+                <select id="alerts-filter-status" name="filterStatus" value={filterStatus} onChange={e => setFilterStatus(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All</option>
                   <option value="active">Active</option>
                   <option value="acknowledged">Acknowledged</option>
@@ -215,8 +218,8 @@ export default function Alerts() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1.5">Type</label>
-                <select value={filterType} onChange={e => setFilterType(e.target.value)} className="input-field text-sm py-2">
+                <label htmlFor="alerts-filter-type" className="block text-xs font-medium text-slate-500 mb-1.5">Type</label>
+                <select id="alerts-filter-type" name="filterType" value={filterType} onChange={e => setFilterType(e.target.value)} className="input-field text-sm py-2">
                   <option value="all">All</option>
                   <option value="sla_breach_imminent">SLA Breach</option>
                   <option value="delay_predicted">Delay Predicted</option>

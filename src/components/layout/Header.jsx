@@ -31,8 +31,11 @@ export default function Header({ onMenuClick }) {
         {/* Search */}
         <form onSubmit={handleSearch} className="flex-1 max-w-lg min-w-0">
           <div className="relative">
+            <label htmlFor="header-search" className="sr-only">Search shipments</label>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
+              id="header-search"
+              name="headerSearch"
               type="text"
               placeholder="Search..."
               value={searchQuery}

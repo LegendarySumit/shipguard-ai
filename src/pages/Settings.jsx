@@ -179,32 +179,32 @@ export default function Settings() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
+                    <label htmlFor="settings-display-name" className="block text-sm font-medium text-slate-700 mb-1.5">Full Name</label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input type="text" value={form.displayName} onChange={updateField('displayName')} className="input-field pl-10" placeholder="Your name" />
+                      <input id="settings-display-name" name="displayName" type="text" value={form.displayName} onChange={updateField('displayName')} className="input-field pl-10" placeholder="Your name" autoComplete="name" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Company</label>
+                    <label htmlFor="settings-company" className="block text-sm font-medium text-slate-700 mb-1.5">Company</label>
                     <div className="relative">
                       <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input type="text" value={form.company} onChange={updateField('company')} className="input-field pl-10" placeholder="Company name" />
+                      <input id="settings-company" name="company" type="text" value={form.company} onChange={updateField('company')} className="input-field pl-10" placeholder="Company name" autoComplete="organization" />
                     </div>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
+                    <label htmlFor="settings-email" className="block text-sm font-medium text-slate-700 mb-1.5">Email Address</label>
                     <div className="relative">
                       <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input type="email" value={currentUser?.email || ''} disabled className="input-field pl-10 bg-slate-50 text-slate-500" />
+                      <input id="settings-email" name="email" type="email" value={currentUser?.email || ''} disabled className="input-field pl-10 bg-slate-50 text-slate-500" autoComplete="email" />
                     </div>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-1.5">Role</label>
-                    <select value={form.role} onChange={updateField('role')} className="input-field" disabled={!canEditRole}>
+                    <label htmlFor="settings-role" className="block text-sm font-medium text-slate-700 mb-1.5">Role</label>
+                    <select id="settings-role" name="role" value={form.role} onChange={updateField('role')} className="input-field" disabled={!canEditRole}>
                       <option value="analyst">Analyst</option>
                       <option value="manager">Manager</option>
                       <option value="admin">Administrator</option>
@@ -266,6 +266,7 @@ export default function Settings() {
                     </div>
                     <label className="relative inline-flex items-center cursor-pointer self-center flex-shrink-0">
                       <input
+                        name={key}
                         type="checkbox"
                         checked={form[key]}
                         onChange={updateField(key)}
@@ -277,10 +278,10 @@ export default function Settings() {
                 ))}
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Daily Digest Time</label>
+                  <label htmlFor="settings-digest-time" className="block text-sm font-medium text-slate-700 mb-1.5">Daily Digest Time</label>
                   <div className="relative max-w-xs">
                     <Clock3 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input type="time" value={form.digestTime} onChange={updateField('digestTime')} className="input-field pl-10" />
+                    <input id="settings-digest-time" name="digestTime" type="time" value={form.digestTime} onChange={updateField('digestTime')} className="input-field pl-10" />
                   </div>
                 </div>
               </div>
@@ -342,6 +343,8 @@ export default function Settings() {
                   <p className="text-xs text-slate-500 mb-3">Shipments above this score trigger proactive alerts.</p>
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
                     <input
+                      id="settings-risk-threshold"
+                      name="riskThreshold"
                       type="range"
                       min="20"
                       max="90"
@@ -358,9 +361,9 @@ export default function Settings() {
                 </div>
 
                 <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">SLA Warning Window</label>
+                  <label htmlFor="settings-sla-warning-hours" className="block text-sm font-medium text-slate-700 mb-1.5">SLA Warning Window</label>
                   <p className="text-xs text-slate-500 mb-3">Trigger warnings this many hours before the SLA deadline.</p>
-                  <select value={form.slaWarningHours} onChange={updateField('slaWarningHours')} className="input-field max-w-xs">
+                  <select id="settings-sla-warning-hours" name="slaWarningHours" value={form.slaWarningHours} onChange={updateField('slaWarningHours')} className="input-field max-w-xs">
                     <option value={24}>24 hours</option>
                     <option value={48}>48 hours (recommended)</option>
                     <option value={72}>72 hours</option>

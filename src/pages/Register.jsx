@@ -99,28 +99,34 @@ export default function Register() {
             <form onSubmit={handleSubmit} className="space-y-4 mt-6">
               <div className="grid sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Full Name *</label>
+                  <label htmlFor="register-name" className="block text-sm font-medium text-slate-700 mb-1.5">Full Name *</label>
                   <div className="relative">
                     <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
+                      id="register-name"
+                      name="name"
                       type="text"
                       value={form.name}
                       onChange={updateField('name')}
                       placeholder="John Doe"
+                      autoComplete="name"
                       className="input-field pl-10"
                       disabled={loading}
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1.5">Company</label>
+                  <label htmlFor="register-company" className="block text-sm font-medium text-slate-700 mb-1.5">Company</label>
                   <div className="relative">
                     <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
+                      id="register-company"
+                      name="company"
                       type="text"
                       value={form.company}
                       onChange={updateField('company')}
                       placeholder="Acme Inc."
+                      autoComplete="organization"
                       className="input-field pl-10"
                       disabled={loading}
                     />
@@ -129,14 +135,17 @@ export default function Register() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Email *</label>
+                <label htmlFor="register-email" className="block text-sm font-medium text-slate-700 mb-1.5">Email *</label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
+                    id="register-email"
+                    name="email"
                     type="email"
                     value={form.email}
                     onChange={updateField('email')}
                     placeholder="you@company.com"
+                    autoComplete="email"
                     className="input-field pl-10"
                     disabled={loading}
                   />
@@ -144,14 +153,17 @@ export default function Register() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Password *</label>
+                <label htmlFor="register-password" className="block text-sm font-medium text-slate-700 mb-1.5">Password *</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
+                    id="register-password"
+                    name="password"
                     type={showPassword ? 'text' : 'password'}
                     value={form.password}
                     onChange={updateField('password')}
                     placeholder="Minimum 6 characters"
+                    autoComplete="new-password"
                     className="input-field pl-10 pr-10"
                     disabled={loading}
                   />
@@ -166,14 +178,17 @@ export default function Register() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1.5">Confirm Password *</label>
+                <label htmlFor="register-confirm-password" className="block text-sm font-medium text-slate-700 mb-1.5">Confirm Password *</label>
                 <div className="relative">
                   <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <input
+                    id="register-confirm-password"
+                    name="confirmPassword"
                     type="password"
                     value={form.confirmPassword}
                     onChange={updateField('confirmPassword')}
                     placeholder="Re-enter password"
+                    autoComplete="new-password"
                     className="input-field pl-10"
                     disabled={loading}
                   />
