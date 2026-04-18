@@ -73,6 +73,9 @@ const allowedOrigins = (env.ALLOWED_ORIGINS || 'http://localhost:3000,http://127
   .map((item) => item.trim())
   .filter(Boolean);
 
+// Geocoding cache to avoid repeated API calls
+const geocodingCache = new Map();
+
 const webhookRequireHmac = String(env.WEBHOOK_REQUIRE_HMAC || 'false').toLowerCase() === 'true';
 const webhookAllowLegacySecret = String(env.WEBHOOK_ALLOW_LEGACY_SECRET || 'true').toLowerCase() === 'true';
 const webhookTimestampToleranceSec = Math.max(30, Number(env.WEBHOOK_TIMESTAMP_TOLERANCE_SEC) || 300);
@@ -808,36 +811,53 @@ app.get('/api/routes/geocode', geocodingLimiter, asyncHandler(async (req, res) =
     return;
   }
 
-  const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(city)}`;
-  const upstream = await fetch(url, {
-    headers: {
-      'User-Agent': 'ShipGuardAI/1.0 (routing-geocoder)',
-      Accept: 'application/json',
-    },
-  });
-
-  if (!upstream.ok) {
-    console.error(`Nominatim API error: ${upstream.status} for city: ${city}`);
-    res.status(upstream.status).json({ error: 'Routing geocoding request failed' });
+  // Check cache first
+  const cacheKey = city.toLowerCase();
+  if (geocodingCache.has(cacheKey)) {
+    console.log(`[Geocoding] Cache hit for: ${city}`);
+    res.json(geocodingCache.get(cacheKey));
     return;
   }
 
-  const data = await upstream.json();
+  let result = null;
 
-  if (!Array.isArray(data) || !data.length) {
-    res.json([]);
-    return;
+  // Try Nominatim (free, no key needed)
+  try {
+    console.log(`[Geocoding] Nominatim API call for: ${city}`);
+    const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(city)}`;
+    const nomResponse = await fetch(nomUrl, {
+      headers: {
+        'User-Agent': 'ShipGuardAI/1.0 (routing-geocoder)',
+        Accept: 'application/json',
+      },
+    });
+
+    if (!nomResponse.ok) {
+      console.error(`[Geocoding] Nominatim error: ${nomResponse.status} for ${city}`);
+      res.status(503).json({ error: 'Geocoding service temporarily unavailable - please retry' });
+      return;
+    }
+
+    const nomData = await nomResponse.json();
+    if (Array.isArray(nomData) && nomData.length > 0) {
+      result = [
+        {
+          name: city,
+          lat: Number(nomData[0].lat),
+          lon: Number(nomData[0].lon),
+          displayName: nomData[0].display_name,
+        },
+      ];
+      console.log(`[Geocoding] Success: ${city} -> ${result[0].lat}, ${result[0].lon}`);
+      
+      // Cache for 24 hours
+      geocodingCache.set(cacheKey, result);
+    }
+  } catch (err) {
+    console.error(`[Geocoding] Nominatim error: ${err.message}`);
   }
 
-  const match = data[0];
-  res.json([
-    {
-      name: city,
-      lat: Number(match.lat),
-      lon: Number(match.lon),
-      displayName: match.display_name,
-    },
-  ]);
+  res.json(result || []);
 }));
 
 function haversineKm(lat1, lon1, lat2, lon2) {
