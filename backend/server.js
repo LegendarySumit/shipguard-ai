@@ -131,6 +131,7 @@ app.use(helmet({
     }
     : false,
   crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
 }));
 
 app.use((req, res, next) => {
@@ -807,11 +808,13 @@ app.get('/api/routes/geocode', asyncHandler(async (req, res) => {
     },
   });
 
-  const data = await upstream.json();
   if (!upstream.ok) {
+    console.error(`Nominatim API error: ${upstream.status} for city: ${city}`);
     res.status(upstream.status).json({ error: 'Routing geocoding request failed' });
     return;
   }
+
+  const data = await upstream.json();
 
   if (!Array.isArray(data) || !data.length) {
     res.json([]);
@@ -858,7 +861,10 @@ async function getOsrmRoutes(origin, destination) {
     steps: 'false',
   });
 
-  const upstream = await fetch(`${OSRM_BASE_URL}/route/v1/driving/${coordinates}?${params.toString()}`);
+  const url = `${OSRM_BASE_URL}/route/v1/driving/${coordinates}?${params.toString()}`;
+  console.log(`[OSRM] Requesting route: ${url}`);
+  
+  const upstream = await fetch(url);
   const data = await upstream.json();
 
   const osrmCode = String(data?.code || '').toLowerCase();
@@ -866,11 +872,13 @@ async function getOsrmRoutes(origin, destination) {
   const isImpossibleRoute = osrmCode === 'noroute' || osrmMessage.includes('impossible route');
 
   if (isImpossibleRoute) {
+    console.warn(`[OSRM] No route found: ${osrmMessage} (HTTP ${upstream.status})`);
     return [];
   }
 
   if (!upstream.ok) {
-    throw new Error(data?.message || 'OSRM route request failed');
+    console.error(`[OSRM] Error: ${upstream.status} ${osrmCode} - ${osrmMessage}`);
+    throw new Error(`OSRM route request failed: ${osrmMessage || 'Unknown error'}`);
   }
 
   return (data.routes || []).map((route, idx) => ({
