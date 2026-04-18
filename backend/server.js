@@ -106,6 +106,14 @@ const webhookLimiter = rateLimit({
   message: { error: 'Too many webhook requests' },
 });
 
+const geocodingLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 1000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Geocoding rate limit exceeded' },
+});
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
@@ -793,7 +801,7 @@ app.get('/api/weather/forecast', asyncHandler(async (req, res) => {
   res.json(data);
 }));
 
-app.get('/api/routes/geocode', asyncHandler(async (req, res) => {
+app.get('/api/routes/geocode', geocodingLimiter, asyncHandler(async (req, res) => {
   const city = String(req.query.city || '').trim();
   if (!city) {
     res.status(400).json({ error: 'city query parameter is required' });
@@ -893,7 +901,7 @@ async function getOsrmRoutes(origin, destination) {
   }));
 }
 
-app.post('/api/routes/alternatives', asyncHandler(async (req, res) => {
+app.post('/api/routes/alternatives', geocodingLimiter, asyncHandler(async (req, res) => {
   const origin = req.body?.origin;
   const destination = req.body?.destination;
   const requestedMode = String(req.body?.mode || 'road').toLowerCase();
