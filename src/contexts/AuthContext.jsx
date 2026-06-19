@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import {
-  browserSessionPersistence,
+  browserLocalPersistence,
   createUserWithEmailAndPassword,
   getRedirectResult,
   signInWithEmailAndPassword,
@@ -215,7 +215,7 @@ export function AuthProvider({ children }) {
 
     const initializeAuth = async () => {
       try {
-        await setPersistence(auth, browserSessionPersistence);
+        await setPersistence(auth, browserLocalPersistence);
       } catch (e) {
         console.error('Failed to set auth persistence:', e);
       }
