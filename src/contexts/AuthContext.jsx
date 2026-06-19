@@ -158,7 +158,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem(AUTH_REDIRECT_PENDING_AT_KEY, String(Date.now()));
     markActivity();
 
-    const useRedirectFlow = isLikelyMobileBrowser();
+    const useRedirectFlow = false;
 
     try {
       if (!useRedirectFlow) {
