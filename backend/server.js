@@ -883,26 +883,82 @@ function parseDurationMinutes(durationText) {
 }
 
 async function getRoutes(origin, destination) {
-  // Try OpenRouteService first (more reliable free tier)
+  // Try OSRM first (free, no key needed, working great)
+  try {
+    console.log(`[Routing] Trying OSRM for: ${origin.lat},${origin.lon} -> ${destination.lat},${destination.lon}`);
+    const coordinates = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
+    const params = new URLSearchParams({
+      alternatives: '3',
+      overview: 'full',
+      geometries: 'polyline',
+      steps: 'false',
+    });
+
+    const url = `${OSRM_BASE_URL}/route/v1/driving/${coordinates}?${params.toString()}`;
+    
+    // Retry logic for OSRM (it can be flaky)
+    let upstream;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        upstream = await fetch(url, { timeout: 10000 });
+        break;
+      } catch (err) {
+        if (attempt === 0) {
+          console.warn(`[Routing] OSRM attempt ${attempt + 1} failed, retrying...`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    const data = await upstream.json();
+
+    const osrmCode = String(data?.code || '').toLowerCase();
+    const osrmMessage = String(data?.message || '').toLowerCase();
+    const isImpossibleRoute = osrmCode === 'noroute' || osrmMessage.includes('impossible route');
+
+    if (isImpossibleRoute) {
+      console.warn(`[Routing] OSRM: No route found: ${osrmMessage}`);
+      // Fall through to ORS
+    } else if (upstream.ok) {
+      console.log(`[Routing] OSRM success: ${(data.routes || []).length} routes`);
+      return (data.routes || []).map((route, idx) => ({
+        id: `osrm-${idx}`,
+        name: idx === 0 ? 'Primary Corridor' : `Alternate ${idx}`,
+        source: 'osrm',
+        distanceKm: Math.round((route.distance || 0) / 1000),
+        durationMin: Math.max(1, Math.round((route.duration || 0) / 60)),
+        fuelImpactPercent: idx === 0 ? 0 : Math.round(3 + idx * 4),
+        warnings: [],
+        polyline: route.geometry || null,
+      }));
+    } else {
+      console.error(`[Routing] OSRM error: ${upstream.status} ${osrmCode} - ${osrmMessage}`);
+    }
+  } catch (err) {
+    console.warn(`[Routing] OSRM failed: ${err.message}`);
+  }
+
+  // Fall back to OpenRouteService if OSRM fails
   if (ORS_API_KEY) {
     try {
       console.log(`[Routing] Trying ORS for: ${origin.lat},${origin.lon} -> ${destination.lat},${destination.lon}`);
-      const orsUrl = `${ORS_BASE_URL}/v2/directions/driving-car`;
+      const orsUrl = `${ORS_BASE_URL}/v2/directions/driving-car?api_key=${encodeURIComponent(ORS_API_KEY)}`;
+      console.log(`[Routing] ORS URL: ${orsUrl.replace(ORS_API_KEY, '***')}`);
       const orsResponse = await fetch(orsUrl, {
         method: 'POST',
         headers: {
-          'Authorization': ORS_API_KEY,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           coordinates: [[origin.lon, origin.lat], [destination.lon, destination.lat]],
-          alternatives: true,
-          radiuses: [-1],
         }),
       });
 
       if (!orsResponse.ok) {
-        console.error(`[Routing] ORS error: ${orsResponse.status}`);
+        const orsErrorData = await orsResponse.text();
+        console.error(`[Routing] ORS error: ${orsResponse.status} - ${orsErrorData}`);
       } else {
         const orsData = await orsResponse.json();
         if (orsData.routes && orsData.routes.length > 0) {
@@ -924,50 +980,9 @@ async function getRoutes(origin, destination) {
     }
   }
 
-  // Fall back to OSRM
-  try {
-    console.log(`[Routing] Trying OSRM for: ${origin.lat},${origin.lon} -> ${destination.lat},${destination.lon}`);
-    const coordinates = `${origin.lon},${origin.lat};${destination.lon},${destination.lat}`;
-    const params = new URLSearchParams({
-      alternatives: '3',
-      overview: 'full',
-      geometries: 'polyline',
-      steps: 'false',
-    });
-
-    const url = `${OSRM_BASE_URL}/route/v1/driving/${coordinates}?${params.toString()}`;
-    const upstream = await fetch(url);
-    const data = await upstream.json();
-
-    const osrmCode = String(data?.code || '').toLowerCase();
-    const osrmMessage = String(data?.message || '').toLowerCase();
-    const isImpossibleRoute = osrmCode === 'noroute' || osrmMessage.includes('impossible route');
-
-    if (isImpossibleRoute) {
-      console.warn(`[Routing] No route found: ${osrmMessage}`);
-      return [];
-    }
-
-    if (!upstream.ok) {
-      console.error(`[Routing] OSRM error: ${upstream.status} ${osrmCode} - ${osrmMessage}`);
-      throw new Error(`OSRM route request failed: ${osrmMessage || 'Unknown error'}`);
-    }
-
-    console.log(`[Routing] OSRM success: ${(data.routes || []).length} routes`);
-    return (data.routes || []).map((route, idx) => ({
-      id: `osrm-${idx}`,
-      name: idx === 0 ? 'Primary Corridor' : `Alternate ${idx}`,
-      source: 'osrm',
-      distanceKm: Math.round((route.distance || 0) / 1000),
-      durationMin: Math.max(1, Math.round((route.duration || 0) / 60)),
-      fuelImpactPercent: idx === 0 ? 0 : Math.round(3 + idx * 4),
-      warnings: [],
-      polyline: route.geometry || null,
-    }));
-  } catch (err) {
-    console.error(`[Routing] OSRM failed: ${err.message}`);
-    throw err;
-  }
+  // No routes available
+  console.error(`[Routing] All routing services failed`);
+  return [];
 }
 
 app.post('/api/routes/alternatives', geocodingLimiter, asyncHandler(async (req, res) => {
